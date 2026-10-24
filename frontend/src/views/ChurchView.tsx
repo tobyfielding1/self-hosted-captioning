@@ -223,17 +223,6 @@ function Finished({
             Email to sound desk team
           </a>
         </div>
-        <p className="text-gray-600">
-          If this link got out, issue a new one. The old link stops working. The QR code stays the same.
-        </p>
-        <a
-          href={ROTATE_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-block underline text-blue-800"
-        >
-          New sound desk link
-        </a>
 
         <h3 className="font-semibold pt-3">QR code for the congregation</h3>
         <p>People scan this with their phone camera to follow along. It never changes, even after updates.</p>
@@ -394,6 +383,11 @@ function Delete({ status }: { status: Status | null | undefined }) {
   const project = status?.project;
   return (
     <div className="space-y-3 pt-2">
+      <p>If the sound desk link got out, issue a new one. The old link stops working. The QR code stays the same.</p>
+      <p>Open the new link the terminal prints on this computer. Copy link then copies that new one. A tab left open still copies the old link until you reload it.</p>
+      <a href={ROTATE_URL} target="_blank" rel="noreferrer" className="inline-block underline text-blue-800">
+        New sound desk link
+      </a>
       <p>
         Delete removes the captioning server and the Google Cloud project the install created
         {project ? ` (${project})` : ""}. Google keeps a deleted project for 30 days if you change your mind.
