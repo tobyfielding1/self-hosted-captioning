@@ -13,8 +13,7 @@ const shellUrl = (tutorial: string) =>
 const INSTALL_URL = shellUrl("deploy.md");
 const ROTATE_URL = shellUrl("rotate.md");
 const DELETE_URL = shellUrl("delete.md");
-const SONIOX_ACCOUNT = "https://console.soniox.com/org/settings";
-const GOOGLE_BILLING = "https://console.cloud.google.com/billing";
+const SONIOX_PROJECT = "https://console.soniox.com/org/projects/settings";
 // Church images freeze their Node major version; below this they need a re-install.
 const MIN_NODE_MAJOR = 24;
 const TIP_DISMISSED = "captioning.fasterTipDismissed";
@@ -315,6 +314,12 @@ function ExtLink({ href, children }: { href: string; children: string }) {
   );
 }
 
+function googleBillingCloseUrl(account: string | null | undefined) {
+  return account
+    ? `https://console.cloud.google.com/billing/${encodeURIComponent(account)}/manage`
+    : "https://console.cloud.google.com/billing";
+}
+
 function googleProjectUrl(project: string) {
   return `https://console.cloud.google.com/home/dashboard?project=${encodeURIComponent(project)}`;
 }
@@ -411,12 +416,14 @@ function Delete({ status }: { status: Status | null | undefined }) {
       <p>These stay, because the install did not create them:</p>
       <ul className="list-disc pl-5 space-y-1">
         <li>
-          Your Soniox account, remaining credit and autopay. <ExtLink href={SONIOX_ACCOUNT}>Delete the Soniox account</ExtLink>
+          The Soniox project and its API key. <ExtLink href={SONIOX_PROJECT}>Delete the Soniox project</ExtLink>. The
+          account and any remaining credit stay.
         </li>
         <li>
-          Your Google billing account and card. <ExtLink href={GOOGLE_BILLING}>Close the Google billing account</ExtLink>{" "}
-          (pick the account, then Account management → Close billing account). Only close it if you created it for
-          captions and nothing else uses it.
+          Your Google billing account and card.{" "}
+          <ExtLink href={googleBillingCloseUrl(status?.billingAccount)}>Close the Google billing account</ExtLink>
+          {status?.billingAccount ? " (Account management → Close billing account)." : " (pick the captions account, then Account management → Close billing account)."}{" "}
+          Only close it if you created it for captions and nothing else uses it.
         </li>
       </ul>
     </div>

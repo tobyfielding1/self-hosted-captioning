@@ -46,5 +46,5 @@ Rollback: run the **release** workflow manually with `ref` set to an older commi
 ## Things that are deliberately frozen
 
 Church images are built once and never rebuilt, so `backend/boot.mjs`, the environment variables
-(`PORT`, `SONIOX_API_KEY`, `SONIOX_REGION`, `SPEAKER_TOKEN`, `AUTO_UPDATE`) and the Node major version
+(`PORT`, `SONIOX_API_KEY`, `SONIOX_REGION`, `SPEAKER_TOKEN`, `BILLING_ACCOUNT`, `AUTO_UPDATE`) and the Node major version
 (24) must stay compatible. Bumping Node means churches re-run the install.

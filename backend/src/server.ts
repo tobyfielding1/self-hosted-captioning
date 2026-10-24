@@ -61,6 +61,7 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
     node: process.versions.node,
     region,
     project,
+    billingAccount: process.env.BILLING_ACCOUNT || null,
     sonioxRegion: catalog.sonioxRegion === null ? null : regionLabel(catalog.sonioxRegion),
     sonioxFasterRegion: catalog.sonioxFasterRegion,
     model: catalog.model,

@@ -142,7 +142,7 @@ if $ROTATE; then
   [ -n "$EXISTING_REGION" ] || fail "There's no captioning server on this Google account." "Install first, or sign in as the church Google account that did."
   STEP="issuing a new sound desk link"
   spin "Issuing a new sound desk link"
-  gcloud run services update "$SERVICE" --region "$EXISTING_REGION" --update-env-vars="SPEAKER_TOKEN=${TOKEN}" --quiet >/dev/null 2>>"$LOG" ||
+  gcloud run services update "$SERVICE" --region "$EXISTING_REGION" --update-env-vars="SPEAKER_TOKEN=${TOKEN},BILLING_ACCOUNT=${BILLING}" --quiet >/dev/null 2>>"$LOG" ||
     fail "Couldn't update the captioning server." "Try this again, or run the install."
   URL="$(gcloud run services describe "$SERVICE" --region "$EXISTING_REGION" --format='value(status.url)' 2>>"$LOG")"
   bold "Done! The old sound desk link no longer works. Open this new one:"
@@ -231,7 +231,7 @@ background() {
     --cpu=1 --memory=512Mi \
     --service-account="$run_sa" \
     --build-service-account="projects/${PROJECT}/serviceAccounts/${build_sa}" \
-    --update-env-vars="SPEAKER_TOKEN=${TOKEN}" \
+    --update-env-vars="SPEAKER_TOKEN=${TOKEN},BILLING_ACCOUNT=${BILLING}" \
     --quiet ||
     die "building the captioning server"
 }
