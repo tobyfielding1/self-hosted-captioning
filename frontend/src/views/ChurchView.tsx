@@ -162,6 +162,7 @@ function Finished({ backend, token, open }: { backend: string; token: string; op
   const canvas = useRef<HTMLCanvasElement>(null);
   const listen = listenerLink(backend);
   const speak = speakLink(backend, token);
+  const setup = `${location.origin}${location.pathname}#setup`;
 
   useEffect(() => {
     void getStatus(backend).then(setStatus);
@@ -232,6 +233,15 @@ function Finished({ backend, token, open }: { backend: string; token: string; op
         <Button variant="secondary" onClick={() => window.print()}>
           Print the card
         </Button>
+
+        <h3 className="font-semibold pt-3">Other churches</h3>
+        <p>Share this so another church can set up the same captions. It starts their own install; it does not use yours.</p>
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={() => copy("churches", setup)}>{copied === "churches" ? "Copied" : "Copy link"}</Button>
+          <a className="inline-block underline text-blue-800 self-center" href={setup} target="_blank" rel="noreferrer">
+            Open the setup page
+          </a>
+        </div>
       </Details>
 
       <Details summary="Set up" open={open || status === null || !!status?.error || !!needsReinstall}>
