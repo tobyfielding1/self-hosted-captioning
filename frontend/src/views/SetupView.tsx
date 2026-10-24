@@ -1,7 +1,7 @@
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { getBackend, getStatus, getToken, listenerLink, protocolSupported, setBackend, setToken, speakLink, type Status } from "../backend";
-import { Banner, Button, Card, copyText, Details } from "../ui";
+import { Banner, Button, Card, copyText } from "../ui";
 
 const REPO = "https://github.com/tobyfielding1/self-hosted-captioning";
 const INSTALL_URL = `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_tutorial=deploy.md&show=terminal`;
@@ -24,11 +24,6 @@ export default function SetupView() {
   return (
     <main className="max-w-2xl mx-auto p-4 space-y-4 print:p-0 print:max-w-none">
       {installed ? <Finished backend={backend!} token={token!} /> : <Wizard onSave={save} />}
-      <div className="print:hidden">
-        <Details summary="Advanced: connect to an existing server">
-          <ManualEntry backend={backend ?? ""} token={token ?? ""} onSave={save} />
-        </Details>
-      </div>
     </main>
   );
 }
@@ -109,7 +104,7 @@ function Wizard({ onSave }: { onSave: (b: string, t: string) => void }) {
           </p>
           <div className="pt-2 space-y-2">
             <label className="block font-semibold" htmlFor="finish-link">
-              Or paste the link it printed:
+              Or paste the link it printed, or a sound desk link:
             </label>
             <div className="flex gap-2">
               <input
@@ -125,7 +120,10 @@ function Wizard({ onSave }: { onSave: (b: string, t: string) => void }) {
                 Continue
               </Button>
             </div>
-            {pasteError && <p className="text-red-700">That doesn't look like the finish link. Copy the whole line after "Done!".</p>}
+            {pasteError && <p className="text-red-700">That doesn't look like the right link. Copy the whole line after "Done!".</p>}
+            <p className="text-sm text-gray-600">
+              Already installed but lost the link? Click Install on Google Cloud again: it prints the same link.
+            </p>
           </div>
           <Button variant="secondary" onClick={() => setStep(1)}>
             Back
@@ -286,39 +284,5 @@ function SundayCard() {
         <li>Problems? Press Help on the page. "Still stuck" has a button that copies details for your helper.</li>
       </ul>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------- manual
-
-function ManualEntry({ backend, token, onSave }: { backend: string; token: string; onSave: (b: string, t: string) => void }) {
-  const [b, setB] = useState(backend);
-  const [t, setT] = useState(token);
-  const [saved, setSaved] = useState(false);
-  return (
-    <form
-      className="space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSave(b, t);
-        setSaved(true);
-      }}
-    >
-      <label className="block">
-        <span className="font-semibold">Server address</span>
-        <input value={b} onChange={(e) => setB(e.target.value)} placeholder="https://captioning-....run.app" className="mt-1 w-full rounded-xl border-2 border-gray-300 px-3 py-2" />
-      </label>
-      <label className="block">
-        <span className="font-semibold">Sound desk code</span>
-        <input value={t} onChange={(e) => setT(e.target.value)} className="mt-1 w-full rounded-xl border-2 border-gray-300 px-3 py-2 font-mono" />
-      </label>
-      <p className="text-sm text-gray-600">
-        Lost the sound desk code? Click Install on Google Cloud and Run again: it prints the same link. To make a new
-        one (the old one stops working), run <code>./deploy.sh --rotate-token</code> instead.
-      </p>
-      <Button type="submit" variant="secondary" disabled={!b.trim() || !t.trim()}>
-        {saved ? "Saved" : "Save"}
-      </Button>
-    </form>
   );
 }

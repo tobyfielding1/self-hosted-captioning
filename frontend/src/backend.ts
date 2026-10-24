@@ -63,12 +63,21 @@ export function getBackend(): string | null {
   return fromQuery ? clean(fromQuery) : localStorage.getItem(KEYS.backend);
 }
 
+export const SETTINGS_CHANGED = "captioning-settings";
+
 export function setBackend(url: string) {
   localStorage.setItem(KEYS.backend, clean(url));
+  window.dispatchEvent(new Event(SETTINGS_CHANGED));
 }
 
 export const getToken = () => localStorage.getItem(KEYS.token);
-export const setToken = (token: string) => localStorage.setItem(KEYS.token, token.trim());
+export function setToken(token: string) {
+  localStorage.setItem(KEYS.token, token.trim());
+  window.dispatchEvent(new Event(SETTINGS_CHANGED));
+}
+
+/** This device has been given the sound desk link (or the install's finish link). */
+export const isSoundDesk = () => !!getBackend() && !!getToken();
 
 export function wsUrl(path: string, params: Record<string, string>): string {
   const base = getBackend()!.replace(/^http/, "ws");
