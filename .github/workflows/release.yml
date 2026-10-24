@@ -24,9 +24,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref || github.sha }}
-          # Full history so rollbacks can name any commit, including by short SHA.
           fetch-depth: 0
+
+      - name: Use the requested commit (rollback)
+        if: inputs.ref
+        run: git checkout --detach "$REF"
+        env:
+          REF: ${{ inputs.ref }}
 
       - uses: actions/setup-node@v7
         with:
