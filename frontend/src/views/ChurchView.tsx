@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { getBackend, getStatus, getToken, listenerLink, protocolSupported, setBackend, setToken, speakLink, type Status } from "../backend";
 import { Banner, Button, Card, copyText } from "../ui";
+import SpeakView from "./SpeakView";
 
 const REPO = "https://github.com/tobyfielding1/self-hosted-captioning";
 const INSTALL_URL = `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_tutorial=deploy.md&show=terminal`;
@@ -9,9 +10,11 @@ const INSTALL_URL = `https://shell.cloud.google.com/cloudshell/editor?cloudshell
 const MIN_NODE_MAJOR = 24;
 const TIP_DISMISSED = "captioning.fasterTipDismissed";
 
-export default function SetupView() {
+/** The church team's page: the setup wizard until this device has a link, then the sound desk plus sharing. */
+export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
   const [backend, setB] = useState(getBackend());
   const [token, setT] = useState(getToken());
+  const [justInstalled, setJustInstalled] = useState(false);
   const installed = !!backend && !!token;
 
   const save = (b: string, t: string) => {
@@ -19,11 +22,19 @@ export default function SetupView() {
     setToken(t);
     setB(getBackend());
     setT(getToken());
+    setJustInstalled(true);
   };
 
   return (
     <main className="max-w-2xl mx-auto p-4 space-y-4 print:p-0 print:max-w-none">
-      {installed ? <Finished backend={backend!} token={token!} /> : <Wizard onSave={save} />}
+      {installed ? (
+        <>
+          <SpeakView />
+          <Finished backend={backend!} token={token!} open={shareOpen || justInstalled} />
+        </>
+      ) : (
+        <Wizard onSave={save} />
+      )}
     </main>
   );
 }
@@ -136,7 +147,7 @@ function Wizard({ onSave }: { onSave: (b: string, t: string) => void }) {
 
 // -------------------------------------------------------------------------- finished
 
-function Finished({ backend, token }: { backend: string; token: string }) {
+function Finished({ backend, token, open }: { backend: string; token: string; open: boolean }) {
   const [status, setStatus] = useState<Status | null | undefined>(undefined);
   const [copied, setCopied] = useState<string | null>(null);
   const [tipDismissed, setTipDismissed] = useState(() => localStorage.getItem(TIP_DISMISSED) === "1");
@@ -184,8 +195,9 @@ function Finished({ backend, token }: { backend: string; token: string }) {
 
   return (
     <>
-      <div className="print:hidden space-y-4">
-        <h1 className="text-3xl font-bold">Live captions are set up</h1>
+      <details open={open} className="print:hidden pt-4">
+        <summary className="cursor-pointer select-none text-xl font-bold py-2">Share and set up</summary>
+        <div className="space-y-4 pt-2">
 
         {status === undefined && <Banner>Checking the captioning server...</Banner>}
         {status === null && (
@@ -229,9 +241,6 @@ function Finished({ backend, token }: { backend: string; token: string }) {
             <a href={mailto} className="bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50">
               Email to sound desk team
             </a>
-            <a href={speak} className="bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50">
-              Use this device
-            </a>
           </div>
         </Card>
 
@@ -255,7 +264,8 @@ function Finished({ backend, token }: { backend: string; token: string }) {
             Print the card
           </Button>
         </Card>
-      </div>
+        </div>
+      </details>
 
       <SundayCard />
     </>
