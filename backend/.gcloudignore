@@ -1,0 +1,4 @@
+node_modules/
+test/
+server.mjs
+server.mjs.sha256
