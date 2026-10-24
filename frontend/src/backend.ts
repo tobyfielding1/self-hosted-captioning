@@ -78,14 +78,32 @@ export function wsUrl(path: string, params: Record<string, string>): string {
   return `${base}${path}?${new URLSearchParams(params)}`;
 }
 
-const appBase = () => `${location.origin}${location.pathname}`;
+/** Site root, including the GitHub Pages project path. Always ends with `/`. */
+export function siteRoot(): string {
+  return `${location.origin}${import.meta.env.BASE_URL}`;
+}
+
+/** The install wizard. A second venue starts here; a new church reads the intro first. */
+export function setupUrl(): string {
+  return `${siteRoot()}setup/`;
+}
+
+/** Path under the site root, with no leading or trailing slash. */
+export function sitePath(url = location.href): string {
+  const path = new URL(url, location.origin).pathname;
+  const base = import.meta.env.BASE_URL;
+  const rest = path.startsWith(base) ? path.slice(base.length) : path.replace(/^\//, "");
+  return rest.replace(/\/+$/, "").replace(/\.html$/, "");
+}
+
+export const isSetupPage = () => sitePath() === "setup";
 
 export function listenerLink(backend = getBackend()): string {
-  return `${appBase()}?backend=${encodeURIComponent(backend ?? "")}`;
+  return `${siteRoot()}?backend=${encodeURIComponent(backend ?? "")}`;
 }
 
 export function speakLink(backend = getBackend(), token = getToken()): string {
-  return `${appBase()}#backend=${encodeURIComponent(backend ?? "")}&token=${encodeURIComponent(token ?? "")}`;
+  return `${siteRoot()}#backend=${encodeURIComponent(backend ?? "")}&token=${encodeURIComponent(token ?? "")}`;
 }
 
 export async function getStatus(backend = getBackend()): Promise<Status | null> {

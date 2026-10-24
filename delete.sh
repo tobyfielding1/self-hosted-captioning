@@ -53,39 +53,54 @@ ACCOUNT="$(gcloud config get-value account 2>>"$LOG" || true)"
 
 STEP="finding your Google Cloud project"
 spin "Looking for your captions project"
-mapfile -t PROJECTS < <(gcloud projects list --filter="labels.${LABEL/=/:}" --format='value(projectId)' 2>>"$LOG" || true)
+PROJECTS=()
+NAMES=()
+while IFS=$'\t' read -r id name; do
+  [ -n "${id:-}" ] || continue
+  PROJECTS+=("$id")
+  NAMES+=("${name:-Live captions}")
+done < <(gcloud projects list --filter="labels.${LABEL/=/:}" --format='value(projectId,name)' 2>>"$LOG" || true)
 [ "${#PROJECTS[@]}" -gt 0 ] || fail "There's no captions project on this Google account." "Nothing to delete. If captions were installed on a different Google account, sign in as that account and run this again."
 if [ "${#PROJECTS[@]}" -eq 1 ]; then
-  PROJECT="${PROJECTS[0]}"
-else
-  project_line() {
-    local url=""
-    url="$(timeout 20 gcloud run services list --project="$1" --filter="metadata.name=${SERVICE}" --format='value(status.url)' --limit=1 2>>"$LOG" || true)"
-    if [ -n "$url" ]; then printf '%s — %s' "$1" "$url"; else printf '%s' "$1"; fi
-  }
-  spin "Looking up each captions server"
-  LINES=()
-  for id in "${PROJECTS[@]}"; do LINES+=("$(project_line "$id")"); done
   spin_stop
-  bold "This Google account has more than one captions setup."
+  PROJECT="${PROJECTS[0]}"
+  DISPLAY="${NAMES[0]}"
+else
+  declare -A COUNT=()
+  dup=false
+  for name in "${NAMES[@]}"; do COUNT["$name"]=$(( ${COUNT["$name"]:-0} + 1 )); done
+  for name in "${NAMES[@]}"; do [ "${COUNT[$name]}" -gt 1 ] && dup=true; done
+  if $dup; then spin "Looking up each captions server"; else spin_stop; fi
+  LINES=()
+  for i in "${!PROJECTS[@]}"; do
+    if [ "${COUNT[${NAMES[$i]}]}" -gt 1 ]; then
+      url="$(timeout 20 gcloud run services list --project="${PROJECTS[$i]}" --filter="metadata.name=${SERVICE}" --format='value(status.url)' --limit=1 2>>"$LOG" || true)"
+      if [ -n "$url" ]; then LINES+=("${NAMES[$i]} — ${url}"); else LINES+=("${NAMES[$i]} — ${PROJECTS[$i]}"); fi
+    else
+      LINES+=("${NAMES[$i]}")
+    fi
+  done
+  if $dup; then spin_stop; fi
+  bold "This Google account has more than one venue."
   for i in "${!PROJECTS[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${LINES[$i]}"; done
   note "Type the number of the one to delete."
   read -rp "   Number: " CHOICE
   [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#PROJECTS[@]}" ] || fail "That wasn't one of the numbers. Nothing was deleted."
   PROJECT="${PROJECTS[$((CHOICE - 1))]}"
+  DISPLAY="${NAMES[$((CHOICE - 1))]}"
 fi
-note "Project: ${PROJECT}"
+note "Project: ${DISPLAY} (${PROJECT})"
 
 BILLING="$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName)' 2>>"$LOG" || true)"
 BILLING="${BILLING#billingAccounts/}"
 
 printf '\n'
-note "This deletes Google Cloud project ${PROJECT} — the captioning server and everything the install created there."
+note "This deletes ${DISPLAY} (${PROJECT}) — the captioning server and everything the install created there."
 note "Google keeps a deleted project for 30 days if you change your mind."
 note ""
 note "This does not close your Soniox account or your Google billing account."
 printf '\n'
-read -rp "   Type the project name to confirm: " CONFIRM
+read -rp "   Type the project id to confirm: " CONFIRM
 [ "$(tr -d '[:space:]' <<<"$CONFIRM")" = "$PROJECT" ] || fail "That didn't match. Nothing was deleted."
 
 if [ -n "$BILLING" ]; then

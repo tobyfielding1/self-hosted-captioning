@@ -90,38 +90,93 @@ bold "Setting up live captions"
 ACCOUNT="$(gcloud config get-value account 2>>"$LOG" || true)"
 [ -n "$ACCOUNT" ] || fail "You're not signed in to Google Cloud." "Open this page from the church Google account: https://shell.cloud.google.com"
 
+# Google Cloud project names are 4–30 characters: letters, numbers, spaces, hyphens, apostrophes, exclamation marks.
+ask_venue_name() {
+  note "What should this venue be called? For example, Main hall or Room 2."
+  note "Press Enter to keep the name \"Live captions\"."
+  local name
+  while true; do
+    read -rp "   Name: " name
+    name="${name#"${name%%[![:space:]]*}"}"
+    name="${name%"${name##*[![:space:]]}"}"
+    [ -z "$name" ] && name="Live captions"
+    if [ "${#name}" -ge 4 ] && [ "${#name}" -le 30 ] && printf '%s' "$name" | grep -Eq "^[A-Za-z0-9 !'-]+$"; then
+      VENUE_NAME="$name"
+      return 0
+    fi
+    note "Use 4 to 30 characters: letters, numbers, spaces, hyphens, apostrophes or exclamation marks."
+  done
+}
 create_project() {
+  local display="Live captions"
+  if [ "${1:-}" = ask ]; then
+    if [ "${#NAMES[@]}" -gt 0 ]; then
+      note "This account already has:"
+      local existing
+      for existing in "${NAMES[@]}"; do note "  • ${existing}"; done
+    fi
+    ask_venue_name
+    display="$VENUE_NAME"
+  fi
+  DISPLAY="$display"
   PROJECT="captioning-$(openssl rand -hex 3)"
   STEP="creating a Google Cloud project"
-  note "Creating project ${PROJECT}..."
-  gcloud projects create "$PROJECT" --name="Live captions" --labels="$LABEL" --quiet >/dev/null 2>>"$LOG" ||
+  note "Creating ${display}..."
+  gcloud projects create "$PROJECT" --name="$display" --labels="$LABEL" --quiet >/dev/null 2>>"$LOG" ||
     fail "Google wouldn't let this account create a new project." \
       "This usually means the account has reached its project limit or belongs to an organisation that restricts projects. Ask your helper, or try a different Google account."
 }
-project_line() {
-  local url=""
-  url="$(timeout 20 gcloud run services list --project="$1" --filter="metadata.name=${SERVICE}" --format='value(status.url)' --limit=1 2>>"$LOG" || true)"
-  if [ -n "$url" ]; then printf '%s — %s' "$1" "$url"; else printf '%s' "$1"; fi
+load_projects() {
+  PROJECTS=()
+  NAMES=()
+  local id name
+  while IFS=$'\t' read -r id name; do
+    [ -n "${id:-}" ] || continue
+    PROJECTS+=("$id")
+    NAMES+=("${name:-Live captions}")
+  done < <(gcloud projects list --filter="labels.${LABEL/=/:}" --format='value(projectId,name)' 2>>"$LOG" || true)
+}
+# Unique names are enough. Two venues with the same name also show the server address.
+project_choices() {
+  local -A count=()
+  local name url i dup=false
+  for name in "${NAMES[@]}"; do count["$name"]=$(( ${count["$name"]:-0} + 1 )); done
+  for name in "${NAMES[@]}"; do [ "${count[$name]}" -gt 1 ] && dup=true; done
+  if $dup; then spin "Looking up each captions server"; else spin_stop; fi
+  LINES=()
+  for i in "${!PROJECTS[@]}"; do
+    name="${NAMES[$i]}"
+    if [ "${count[$name]}" -gt 1 ]; then
+      url="$(timeout 20 gcloud run services list --project="${PROJECTS[$i]}" --filter="metadata.name=${SERVICE}" --format='value(status.url)' --limit=1 2>>"$LOG" || true)"
+      if [ -n "$url" ]; then LINES+=("${name} — ${url}"); else LINES+=("${name} — ${PROJECTS[$i]}"); fi
+    else
+      LINES+=("$name")
+    fi
+  done
+  if $dup; then spin_stop; fi
 }
 
 if $NEW_PROJECT; then
-  create_project
+  spin "Looking for your captions project"
+  load_projects
+  spin_stop
+  if [ "${#PROJECTS[@]}" -gt 0 ]; then create_project ask; else create_project; fi
 else
   spin "Looking for your captions project"
-  mapfile -t PROJECTS < <(gcloud projects list --filter="labels.${LABEL/=/:}" --format='value(projectId)' 2>>"$LOG" || true)
+  load_projects
   if [ "${#PROJECTS[@]}" -eq 0 ]; then
+    spin_stop
     if $ROTATE; then
       fail "There's no captioning server on this Google account." "Install first, or sign in as the church Google account that did."
     fi
     create_project
   elif [ "${#PROJECTS[@]}" -eq 1 ]; then
-    PROJECT="${PROJECTS[0]}"
-  else
-    spin "Looking up each captions server"
-    LINES=()
-    for id in "${PROJECTS[@]}"; do LINES+=("$(project_line "$id")"); done
     spin_stop
-    bold "This Google account has more than one captions setup."
+    PROJECT="${PROJECTS[0]}"
+    DISPLAY="${NAMES[0]}"
+  else
+    project_choices
+    bold "This Google account has more than one venue."
     for i in "${!PROJECTS[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${LINES[$i]}"; done
     if $ROTATE || $NEW_KEY; then
       note "Type the number of the one you want."
@@ -131,14 +186,15 @@ else
       read -rp "   Choice: " CHOICE
     fi
     if [ "$CHOICE" = new ] && ! $ROTATE && ! $NEW_KEY; then
-      create_project
+      create_project ask
     else
       [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#PROJECTS[@]}" ] || fail "That wasn't one of the choices."
       PROJECT="${PROJECTS[$((CHOICE - 1))]}"
+      DISPLAY="${NAMES[$((CHOICE - 1))]}"
     fi
   fi
 fi
-note "Project: ${PROJECT}"
+note "Project: ${DISPLAY} (${PROJECT})"
 gcloud config set project "$PROJECT" >/dev/null 2>>"$LOG"
 
 # --------------------------------------------------------------------------- billing

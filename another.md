@@ -4,6 +4,8 @@ Use this to run a second session at the same time, on the same Google account. T
 
 The same Google billing account is fine, and the same Soniox account is fine. When it asks for a Soniox key, create a new one. That is the recommended choice.
 
+It asks what to call this venue, so you can tell it apart from the first. Press Enter to keep the name Live captions.
+
 ## Start
 
 Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the church Google account.

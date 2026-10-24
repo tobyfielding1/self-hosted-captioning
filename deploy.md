@@ -16,7 +16,7 @@ Click the **copy** button on the box below (it pastes into the terminal at the b
 
 Google Cloud now sets itself up, which takes a few minutes. You don't need to wait: click **Next** and get your Soniox key while it works.
 
-To run another venue at the same time on this Google account, go back to the captions website and choose **Set up another venue**. If this account already has several, the terminal asks which one you mean.
+If this Google account already has more than one venue, the terminal lists them by name and asks which one you mean.
 
 ## Get your Soniox key while it works
 

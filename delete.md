@@ -14,7 +14,7 @@ Click the **copy** button on the box below (it pastes into the terminal at the b
 ./delete.sh
 ```
 
-When it asks, type the project name and press **Enter**.
+When it asks, type the project id and press **Enter**. If this account has more than one venue, it lists them by name first.
 
 ### What stays
 

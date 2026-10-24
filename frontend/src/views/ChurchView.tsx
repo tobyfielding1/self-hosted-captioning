@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { getBackend, getStatus, getToken, listenerLink, protocolSupported, speakLink, type Status } from "../backend";
+import { getBackend, getStatus, getToken, isSetupPage, listenerLink, protocolSupported, setupUrl, siteRoot, speakLink, type Status } from "../backend";
 import { Banner, Button, Card, copyText, Details } from "../ui";
 import SpeakView from "./SpeakView";
 
@@ -21,7 +21,7 @@ const SONIOX_KEYS = "https://console.soniox.com/org/projects/api/keys";
 const MIN_NODE_MAJOR = 24;
 const TIP_DISMISSED = "captioning.fasterTipDismissed";
 
-/** The church team's page: the setup wizard until the address is a sound desk link. */
+/** The church team's page: an intro, the setup wizard at /setup, or the sound desk when the address is a sound desk link. */
 export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
   const backend = getBackend();
   const token = getToken();
@@ -48,10 +48,46 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
             )}
           />
         </>
-      ) : (
+      ) : isSetupPage() ? (
         <Wizard />
+      ) : (
+        <Intro />
       )}
     </main>
+  );
+}
+
+// ----------------------------------------------------------------------------- intro
+
+function Intro() {
+  return (
+    <>
+      <h1 className="text-3xl font-bold">Live captions</h1>
+      <p className="text-lg text-gray-700">
+        Captions and translation for a church service. The sound desk runs them from a laptop. People follow on their phones.
+      </p>
+      <Card title="Set up once">
+        <p className="text-lg">
+          You do this on the church Google account. It takes about 15 minutes. Each church gets its own server, sound desk
+          link, and QR code.
+        </p>
+        <p>
+          Soniox turns speech into captions and translations, and charges for the time you are live. See{" "}
+          <a className="underline" href="https://soniox.com/pricing" target="_blank" rel="noreferrer">
+            Soniox pricing
+          </a>. Hosting the server fits in Google Cloud's free tier for normal use.
+        </p>
+        <a
+          href={setupUrl()}
+          className="inline-block bg-blue-700 hover:bg-blue-800 text-white text-2xl font-semibold px-8 py-5 rounded-2xl"
+        >
+          Set up live captions
+        </a>
+        <p className="text-sm text-gray-600">
+          Already set up? Open the sound desk bookmark. Lost that link? The setup page prints it again.
+        </p>
+      </Card>
+    </>
   );
 }
 
@@ -112,24 +148,26 @@ function Wizard() {
             Install on Google Cloud
           </a>
           <p className="text-lg">
-            When it says <strong>Done!</strong>, open the link it prints. It brings you back here with everything filled in.
+            When it says <strong>Done!</strong>, open the link it prints. That page is the sound desk, with the QR code and the links to share.
           </p>
           <p className="text-sm text-gray-600">
-            Already installed but lost the link? Click Install on Google Cloud again: it prints the same link.
+            Already installed but lost the link? Click Install on Google Cloud again. One venue prints that link. Several
+            venues: the terminal lists them by name and asks which one.
           </p>
-          <p className="text-lg">Two sessions at once, even with this same Google account in this browser?</p>
-          <a
-            href={ANOTHER_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50"
-          >
-            Set up another venue
-          </a>
-          <p className="text-sm text-gray-600">
-            It creates a separate server so both can be live together. The same Google billing account and Soniox account are
-            fine. A new Soniox key is recommended. Open the new link it prints. Each address is its own venue.
-          </p>
+          <div className="border-t border-gray-200 pt-3 space-y-2">
+            <p className="text-sm text-gray-600">
+              A second session at the same time needs its own server. The same Google billing account and Soniox account are
+              fine. A new Soniox key is recommended. The terminal asks what to call this venue.
+            </p>
+            <a
+              href={ANOTHER_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50"
+            >
+              Set up another venue
+            </a>
+          </div>
           <Button variant="secondary" onClick={() => setStep(1)}>
             Back
           </Button>
@@ -156,7 +194,7 @@ function Finished({
   const canvas = useRef<HTMLCanvasElement>(null);
   const listen = listenerLink(backend);
   const speak = speakLink(backend, token);
-  const site = `${location.origin}${location.pathname}`;
+  const intro = siteRoot();
 
   useEffect(() => {
     if (canvas.current) void QRCode.toCanvas(canvas.current, listen, { width: 280, margin: 2, errorCorrectionLevel: "M" });
@@ -221,14 +259,11 @@ function Finished({
           Print the card
         </Button>
 
-        <h3 className="font-semibold pt-3">Other venues</h3>
-        <p>
-          Share this so another venue can set up the same captions. On that page, "Set up another venue" keeps this one
-          separate, including on the same Google account and in this browser.
-        </p>
+        <h3 className="font-semibold pt-3">Another church</h3>
+        <p>Send them the captions page. It explains how this works, and they set up their own from there.</p>
         <div className="flex flex-wrap gap-3">
-          <Button onClick={() => copy("churches", site)}>{copied === "churches" ? "Copied" : "Copy link"}</Button>
-          <a className="inline-block underline text-blue-800 self-center" href={site} target="_blank" rel="noreferrer">
+          <Button onClick={() => copy("church", intro)}>{copied === "church" ? "Copied" : "Copy the page"}</Button>
+          <a className="inline-block underline text-blue-800 self-center" href={intro} target="_blank" rel="noreferrer">
             Open the page
           </a>
         </div>
@@ -371,7 +406,7 @@ function startNewDeskLink() {
   if (!shell) return;
   shell.opener = null;
   window.close();
-  location.replace(`${location.origin}${location.pathname}`);
+  location.replace(siteRoot());
 }
 
 function Delete({ status }: { status: Status | null | undefined }) {
@@ -393,13 +428,17 @@ function Delete({ status }: { status: Status | null | undefined }) {
       </Button>
       <h3 className="font-semibold pt-3">Set up another venue</h3>
       <p>
-        Creates a separate server so two sessions can run at the same time. This venue's link and QR code stay the same.
-        The same Google billing account and Soniox account are fine. A new Soniox key is recommended. Open the new link it
-        prints, in this browser or any other.
+        Opens the setup page, for a second session at the same time on this Google account. This venue's link and QR code
+        stay the same. The same Google billing account and Soniox account are fine. A new Soniox key is recommended.
       </p>
-      <Button variant="secondary" onClick={() => window.open(ANOTHER_URL, "_blank", "noopener")}>
+      <a
+        href={setupUrl()}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-block bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50"
+      >
         Set up another venue
-      </Button>
+      </a>
       <h3 className="font-semibold pt-3">Delete</h3>
       <p>
         Delete removes the captioning server and the Google Cloud project the install created
