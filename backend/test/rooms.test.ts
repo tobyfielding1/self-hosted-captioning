@@ -182,14 +182,13 @@ describe("catalog", () => {
     ]);
   });
 
-  it("offers each Google-only language once, under its current code", () => {
-    app.catalog.sonioxTargets = new Set(["en", "he", "tl"]);
-    app.catalog.googleTargets = new Set(["iw", "he", "jw", "jv", "fil", "yue", "zh-TW"]);
-    const google = app.catalog
-      .languages()
-      .targets.filter((t) => t.via === "google")
-      .map((t) => t.code);
-    expect(google.sort()).toEqual(["jv", "yue", "zh-TW"]);
+  it("adds Google languages and regional variants Soniox lacks, each once", () => {
+    app.catalog.sonioxTargets = new Set(["en", "he", "tl", "zh", "pt"]);
+    app.catalog.googleTargets = new Set(["iw", "he", "jw", "jv", "fil", "yue", "zh-CN", "zh-TW", "pt", "pt-PT"]);
+    app.catalog.googleNames = new Map([["yue", "Cantonese"]]);
+    const google = app.catalog.languages().targets.filter((t) => t.via === "google");
+    expect(google.map((t) => t.code).sort()).toEqual(["jv", "pt-PT", "yue", "zh-TW"]);
+    expect(google.find((t) => t.code === "yue")).toMatchObject({ name: "Cantonese" });
   });
 });
 

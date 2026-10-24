@@ -7,13 +7,20 @@ const RETRY_MS = 60 * 1000;
 
 export type Via = "soniox" | "google";
 
-const base = (code: string) => code.toLowerCase().split(/[-_]/)[0];
-
 function canonical(code: string): string {
   try {
     return Intl.getCanonicalLocales(code)[0] ?? code;
   } catch {
     return code;
+  }
+}
+
+/** Fully expanded locale, so "zh" and "zh-CN" match (both zh-Hans-CN) but "zh-TW" doesn't. */
+function localeKey(code: string): string {
+  try {
+    return new Intl.Locale(canonical(code)).maximize().toString();
+  } catch {
+    return code.toLowerCase();
   }
 }
 
@@ -47,6 +54,8 @@ export class Catalog {
   speech: string[] = [];
   sonioxTargets = new Set<string>();
   googleTargets = new Set<string>();
+  /** English names from Google, for languages browsers can't name themselves. */
+  googleNames = new Map<string, string>();
   error: string | null = null;
   private timer?: NodeJS.Timeout;
 
@@ -102,12 +111,14 @@ export class Catalog {
     if (!project || !token) return;
     try {
       const res = await fetch(
-        `https://translation.googleapis.com/v3/projects/${project}/locations/global/supportedLanguages`,
+        `https://translation.googleapis.com/v3/projects/${project}/locations/global/supportedLanguages?displayLanguageCode=en`,
         { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
-      const body = (await res.json()) as { languages: { languageCode: string; supportTarget: boolean }[] };
-      this.googleTargets = new Set(body.languages.filter((l) => l.supportTarget).map((l) => l.languageCode));
+      const body = (await res.json()) as { languages: { languageCode: string; displayName?: string; supportTarget: boolean }[] };
+      const targets = body.languages.filter((l) => l.supportTarget);
+      this.googleTargets = new Set(targets.map((l) => l.languageCode));
+      this.googleNames = new Map(targets.filter((l) => l.displayName).map((l) => [l.languageCode, l.displayName!]));
       log.info("google catalog", { targets: this.googleTargets.size });
     } catch (e) {
       log.warn("google catalog failed", { err: String(e) });
@@ -124,20 +135,21 @@ export class Catalog {
     return null;
   }
 
+  /** Soniox languages, plus Google for any language or regional variant Soniox doesn't offer. */
   languages() {
-    const sonioxBases = new Set([...this.sonioxTargets].map((c) => base(canonical(c))));
-    const google = [...this.googleTargets].filter((c) => {
-      const canon = canonical(c);
-      if (sonioxBases.has(base(canon))) return false;
-      // Google also lists legacy aliases (iw for he, jw for jv); keep only the current code.
-      return canon === c || !this.googleTargets.has(canon);
-    });
+    const seen = new Set([...this.sonioxTargets].map(localeKey));
+    // Current codes before legacy aliases (iw for he, jw for jv), so the alias is the one dropped.
+    const googleCodes = [...this.googleTargets].sort((a, b) => Number(canonical(a) !== a) - Number(canonical(b) !== b));
+    const google: { code: string; via: "google"; name?: string }[] = [];
+    for (const code of googleCodes) {
+      const key = localeKey(code);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      google.push({ code, via: "google", name: this.googleNames.get(code) });
+    }
     return {
       speech: this.speech,
-      targets: [
-        ...[...this.sonioxTargets].map((code) => ({ code, via: "soniox" as const })),
-        ...google.map((code) => ({ code, via: "google" as const })),
-      ],
+      targets: [...[...this.sonioxTargets].map((code) => ({ code, via: "soniox" as const })), ...google],
     };
   }
 }

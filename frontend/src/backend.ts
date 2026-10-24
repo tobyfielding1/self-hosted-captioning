@@ -22,7 +22,8 @@ export interface Status {
 
 export interface Languages {
   speech: string[];
-  targets: { code: string; via: "soniox" | "google" }[];
+  /** `name` is Google's English name, for languages browsers can't name themselves. */
+  targets: { code: string; via: "soniox" | "google"; name?: string }[];
 }
 
 function hashParams(): URLSearchParams {

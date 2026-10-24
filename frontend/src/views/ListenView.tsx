@@ -218,7 +218,7 @@ export default function ListenView() {
           onClick={() => setChoosing(true)}
           className="flex-1 text-left text-lg font-semibold truncate rounded-lg px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-900"
         >
-          {label(lang!)} <span className="text-gray-500 font-normal">(change)</span>
+          {label(lang!, languages?.targets.find((t) => t.code === lang)?.name)} <span className="text-gray-500 font-normal">(change)</span>
         </button>
         {phase === "reconnecting" && <span className="text-sm text-amber-700 dark:text-amber-400">Reconnecting...</span>}
         <IconButton label="Smaller text" onClick={() => setSize((s) => Math.max(0, s - 1))}>
@@ -287,6 +287,22 @@ function IconButton({ label: text, onClick, children }: { label: string; onClick
   );
 }
 
+const VIA_HINT = {
+  soniox: "Soniox: live, word by word, with faster and more natural translation. Also cheaper for your church.",
+  google: "Google Translate: a sentence at a time, just after it's spoken. Used for languages Soniox doesn't offer.",
+};
+
+function ViaTag({ via }: { via: "soniox" | "google" }) {
+  return (
+    <span
+      title={VIA_HINT[via]}
+      className="inline-block align-middle rounded-full border border-gray-300 dark:border-gray-700 px-2 py-0.5 text-xs font-medium text-gray-500 whitespace-nowrap"
+    >
+      {via === "soniox" ? "Soniox" : "Google"}
+    </span>
+  );
+}
+
 function LanguageChooser({
   languages,
   current,
@@ -301,15 +317,25 @@ function LanguageChooser({
   dark: boolean;
 }) {
   const [filter, setFilter] = useState("");
+  const names = useMemo(
+    () => new Map((languages?.targets ?? []).filter((t) => t.name).map((t) => [t.code, t.name!])),
+    [languages],
+  );
   const codes = useMemo(() => {
-    const ordered = orderLanguages((languages?.targets ?? []).map((t) => t.code));
+    const ordered = orderLanguages(
+      (languages?.targets ?? []).map((t) => t.code),
+      names,
+    );
     const preferred = (navigator.languages ?? [navigator.language]).map(baseCode);
     const firstOther = ordered.findIndex((c) => !preferred.includes(baseCode(c)));
     const split = firstOther === -1 ? ordered.length : firstOther;
     return [...ordered.slice(0, split), ORIGINAL, ...ordered.slice(split)];
-  }, [languages]);
+  }, [languages, names]);
+  const via = useMemo(() => new Map((languages?.targets ?? []).map((t) => [t.code, t.via])), [languages]);
   const q = filter.trim().toLocaleLowerCase();
-  const shown = q ? codes.filter((c) => label(c).toLocaleLowerCase().includes(q) || c.startsWith(q)) : codes;
+  const shown = q
+    ? codes.filter((c) => label(c, names.get(c)).toLocaleLowerCase().includes(q) || c.startsWith(q))
+    : codes;
 
   return (
     <Shell dark={dark}>
@@ -331,16 +357,23 @@ function LanguageChooser({
           className="w-full rounded-xl border-2 border-gray-300 dark:border-gray-700 bg-transparent px-4 py-3 text-lg"
         />
         {!languages && <p className="text-gray-500">Loading languages...</p>}
+        {languages && (
+          <p className="text-sm text-gray-500">
+            <ViaTag via="soniox" /> appears word by word, with faster, more natural translation, and costs your church
+            less. <ViaTag via="google" /> appears a sentence at a time. If your language has both, choose Soniox.
+          </p>
+        )}
         <ul className="flex-1 overflow-y-auto space-y-2">
           {shown.map((code) => (
             <li key={code}>
               <button
                 onClick={() => onChoose(code)}
-                className={`w-full text-left text-xl px-4 py-4 rounded-xl border-2 ${
+                className={`w-full flex items-center gap-3 text-left text-xl px-4 py-4 rounded-xl border-2 ${
                   code === current ? "border-blue-700" : "border-gray-200 dark:border-gray-800"
                 } hover:bg-gray-100 dark:hover:bg-gray-900`}
               >
-                {label(code)}
+                <span className="flex-1">{label(code, names.get(code))}</span>
+                {via.has(code) && <ViaTag via={via.get(code)!} />}
               </button>
             </li>
           ))}
