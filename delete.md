@@ -7,7 +7,7 @@ This deletes the Google Cloud project the install created: the captioning server
 Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the church Google account.
 
 ```bash
-git pull -q --ff-only; ./delete.sh
+./delete.sh
 ```
 
 When it asks, type the project name and press **Enter**.
