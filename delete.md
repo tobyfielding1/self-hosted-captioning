@@ -1,8 +1,12 @@
 # Remove live captions
 
+## Before you start
+
 This deletes the Google Cloud project the install created: the captioning server and everything in that project. It does **not** close your Soniox account or your Google billing account.
 
-## Start
+Click **Start**. The next page has one command to copy into the terminal.
+
+## Delete the project
 
 Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the church Google account.
 
@@ -12,7 +16,7 @@ Click the **copy** button on the box below (it pastes into the terminal at the b
 
 When it asks, type the project name and press **Enter**.
 
-## What stays
+### What stays
 
 The install never created these, so they stay until you close them yourself:
 
