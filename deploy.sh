@@ -258,6 +258,7 @@ if $ASK_KEY; then
   note ""
   note "1. Open https://console.soniox.com and sign up, or sign in."
   note "2. Add some credit under Billing (prices: https://soniox.com/pricing)."
+  note "   Tip: also turn on \"Enable autopay\" there, so captions never stop because the credit ran out."
   note "3. Click \"API keys\", then \"Create API key\", and copy it."
   note "4. Come back here, paste it below and press Enter."
   TRIES=0

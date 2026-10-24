@@ -432,7 +432,7 @@ export default function SpeakView() {
               <a className="underline text-blue-800" href="https://console.soniox.com" target="_blank" rel="noreferrer">
                 console.soniox.com
               </a>
-              .
+              , under Billing. Turning on "Enable autopay" there stops this happening again.
             </dd>
           </div>
           <div>

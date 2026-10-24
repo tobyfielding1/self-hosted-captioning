@@ -15,7 +15,7 @@ Google Cloud now sets itself up, which takes a few minutes. You don't need to wa
 Soniox turns speech into captions and translations.
 
 1. Open [console.soniox.com](https://console.soniox.com) and sign up, or sign in.
-2. Add some credit under Billing. See [Soniox pricing](https://soniox.com/pricing).
+2. Add some credit under Billing. See [Soniox pricing](https://soniox.com/pricing). We recommend also turning on **Enable autopay** there, which tops up from your card when the credit runs low, so captions never stop mid-service.
 3. Click **API keys**, then **Create API key**, and copy it.
 4. Come back to the terminal, paste the key and press **Enter**. Nothing appears while you paste. That's normal.
 
