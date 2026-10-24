@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { audioSupported, guessMode, listInputs, startCapture, type Capture, type InputMode } from "../audio/capture";
 import { calibrate, DEFAULT_THRESHOLD, FRAME_MS, Gate, MAX_THRESHOLD, MIN_THRESHOLD } from "../audio/gate";
 import { getBackend, getStatus, getToken, listenerLink, protocolSupported, type Status } from "../backend";
@@ -27,7 +27,7 @@ function describeListeners(listeners: Record<string, number>): string {
   return `${plural(total)} following (${parts.join(", ")})`;
 }
 
-export default function SpeakView() {
+export default function SpeakView({ extras }: { extras?: (panels: ReactNode) => ReactNode } = {}) {
   const backend = getBackend();
   const token = getToken();
   const supported = audioSupported();
@@ -285,7 +285,7 @@ export default function SpeakView() {
   else if (conn === "reconnecting") headline = "Reconnecting...";
   else if (conn === "live") headline = paused ? "Paused" : `Live: ${listenersText || "connecting"}`;
 
-  return (
+  const desk = (
     <Page>
       {status && !protocolSupported(status) && (
         <Banner tone="warn">This server is out of date. Ask your admin to re-run the install.</Banner>
@@ -416,6 +416,45 @@ export default function SpeakView() {
           </div>
         )}
       </section>
+    </Page>
+  );
+
+  const panels = (
+    <>
+      <Details summary="Advanced">
+        <fieldset className="space-y-1">
+          <legend className="font-semibold">Input type</legend>
+          {(["desk", "mic"] as const).map((m) => (
+            <label key={m} className="flex items-center gap-2">
+              <input type="radio" name="mode" checked={mode === m} onChange={() => pickMode(m)} />
+              {m === "desk" ? "Desk feed (clean audio, no processing)" : "Device microphone (reduce noise, even out volume)"}
+            </label>
+          ))}
+        </fieldset>
+        <div>
+          <label className="flex items-center gap-2 font-semibold">
+            <input type="checkbox" checked={manualThreshold === null} onChange={(e) => setManual(e.target.checked ? null : threshold)} />
+            Set the silence level automatically
+          </label>
+          {manualThreshold !== null && (
+            <input
+              type="range"
+              className="w-full"
+              min={Math.log(MIN_THRESHOLD)}
+              max={Math.log(MAX_THRESHOLD)}
+              step={0.01}
+              value={Math.log(manualThreshold)}
+              onChange={(e) => setManual(Math.exp(Number(e.target.value)))}
+              aria-label="Silence level"
+            />
+          )}
+          <p className="text-sm text-gray-600">Sound below the line on the meter isn't sent.</p>
+        </div>
+        <p className="text-sm text-gray-600 break-all">
+          Server: {backend}
+          {status && ` (version ${status.version})`}
+        </p>
+      </Details>
 
       <Details summary="Help">
         <dl className="space-y-3">
@@ -457,42 +496,14 @@ export default function SpeakView() {
           </div>
         </dl>
       </Details>
+    </>
+  );
 
-      <Details summary="Advanced">
-        <fieldset className="space-y-1">
-          <legend className="font-semibold">Input type</legend>
-          {(["desk", "mic"] as const).map((m) => (
-            <label key={m} className="flex items-center gap-2">
-              <input type="radio" name="mode" checked={mode === m} onChange={() => pickMode(m)} />
-              {m === "desk" ? "Desk feed (clean audio, no processing)" : "Device microphone (reduce noise, even out volume)"}
-            </label>
-          ))}
-        </fieldset>
-        <div>
-          <label className="flex items-center gap-2 font-semibold">
-            <input type="checkbox" checked={manualThreshold === null} onChange={(e) => setManual(e.target.checked ? null : threshold)} />
-            Set the silence level automatically
-          </label>
-          {manualThreshold !== null && (
-            <input
-              type="range"
-              className="w-full"
-              min={Math.log(MIN_THRESHOLD)}
-              max={Math.log(MAX_THRESHOLD)}
-              step={0.01}
-              value={Math.log(manualThreshold)}
-              onChange={(e) => setManual(Math.exp(Number(e.target.value)))}
-              aria-label="Silence level"
-            />
-          )}
-          <p className="text-sm text-gray-600">Sound below the line on the meter isn't sent.</p>
-        </div>
-        <p className="text-sm text-gray-600 break-all">
-          Server: {backend}
-          {status && ` (version ${status.version})`}
-        </p>
-      </Details>
-    </Page>
+  return (
+    <div className="space-y-4">
+      {desk}
+      {extras ? extras(panels) : <div className="space-y-4 print:hidden">{panels}</div>}
+    </div>
   );
 }
 

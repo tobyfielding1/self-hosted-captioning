@@ -45,8 +45,14 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
       {installed ? (
         <>
           <Notices status={status} />
-          <SpeakView />
-          <Finished backend={backend!} token={token!} open={shareOpen || justInstalled} status={status} />
+          <SpeakView
+            extras={(panels) => (
+              <>
+                <Finished backend={backend!} token={token!} open={shareOpen || justInstalled} status={status} />
+                <div className="space-y-4 print:hidden">{panels}</div>
+              </>
+            )}
+          />
         </>
       ) : (
         <Wizard onSave={save} />
