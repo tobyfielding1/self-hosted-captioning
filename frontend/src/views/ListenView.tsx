@@ -218,7 +218,7 @@ export default function ListenView() {
       </Shell>
     );
 
-  if (choosing) return <LanguageChooser languages={languages} current={lang ?? localStorage.getItem(STORE.lang)} venue={venue} onChoose={choose} onCancel={lang ? () => setChoosing(false) : undefined} dark={dark} />;
+  if (choosing) return <LanguageChooser languages={languages} current={lang ?? localStorage.getItem(STORE.lang)} venue={venue} onChoose={choose} dark={dark} />;
 
   const empty = !caption.lines.length && !caption.current && !caption.partial;
   let message: string | null = null;
@@ -231,27 +231,41 @@ export default function ListenView() {
   else if (paused) message = "Captions paused";
   else if (phase === "live" && empty) message = "Live. Captions will appear when someone speaks.";
 
+  const backToLanguages = () => setChoosing(true);
+
   return (
     <Shell dark={dark}>
       <header className="border-b border-gray-200 dark:border-gray-800">
-        {venue && <p className="px-5 pt-3 text-lg font-semibold truncate">{venue}</p>}
+        {venue && (
+          <button
+            type="button"
+            onClick={backToLanguages}
+            className="block w-full truncate px-5 pt-3 text-left text-lg font-semibold hover:underline"
+          >
+            {venue}
+          </button>
+        )}
         <div className="flex items-center gap-2 px-3 py-2">
-        <button
-          onClick={() => setChoosing(true)}
-          className="flex-1 text-left text-lg font-semibold truncate rounded-lg px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-900"
-        >
-          {label(lang!, languages?.targets.find((t) => t.code === lang)?.name)} <span className="text-gray-500 font-normal">(change)</span>
-        </button>
-        {phase === "reconnecting" && <span className="text-sm text-amber-700 dark:text-amber-400">Reconnecting...</span>}
-        <IconButton label="Smaller text" onClick={() => setSize((s) => Math.max(0, s - 1))}>
-          A-
-        </IconButton>
-        <IconButton label="Bigger text" onClick={() => setSize((s) => Math.min(SIZES.length - 1, s + 1))}>
-          A+
-        </IconButton>
-        <IconButton label={dark ? "Light mode" : "Dark mode"} onClick={() => setDark((d) => !d)}>
-          {dark ? "☀" : "☾"}
-        </IconButton>
+          <p className="min-w-0 flex-1 truncate px-2 text-lg font-semibold">
+            {label(lang!, languages?.targets.find((t) => t.code === lang)?.name)}
+          </p>
+          {phase === "reconnecting" && <span className="text-sm text-amber-700 dark:text-amber-400">Reconnecting...</span>}
+          <button
+            type="button"
+            onClick={backToLanguages}
+            className="h-11 shrink-0 rounded-lg border border-gray-300 px-3 text-lg font-semibold hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-900"
+          >
+            Back
+          </button>
+          <IconButton label="Smaller text" onClick={() => setSize((s) => Math.max(0, s - 1))}>
+            A-
+          </IconButton>
+          <IconButton label="Bigger text" onClick={() => setSize((s) => Math.min(SIZES.length - 1, s + 1))}>
+            A+
+          </IconButton>
+          <IconButton label={dark ? "Light mode" : "Dark mode"} onClick={() => setDark((d) => !d)}>
+            {dark ? "☀" : "☾"}
+          </IconButton>
         </div>
       </header>
 
@@ -331,14 +345,12 @@ function LanguageChooser({
   current,
   venue,
   onChoose,
-  onCancel,
   dark,
 }: {
   languages: Languages | null;
   current: string | null;
   venue: string | null;
   onChoose: (code: string) => void;
-  onCancel?: () => void;
   dark: boolean;
 }) {
   const [filter, setFilter] = useState("");
@@ -360,14 +372,7 @@ function LanguageChooser({
     <Shell dark={dark}>
       <div className="max-w-xl w-full mx-auto flex flex-col h-full p-4 gap-3">
         {venue && <p className="text-lg font-semibold text-gray-600 dark:text-gray-300">{venue}</p>}
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold flex-1">Choose your language</h1>
-          {onCancel && (
-            <button onClick={onCancel} className="text-lg underline">
-              Back
-            </button>
-          )}
-        </div>
+        <h1 className="text-3xl font-bold">Choose your language</h1>
         <input
           type="search"
           value={filter}
