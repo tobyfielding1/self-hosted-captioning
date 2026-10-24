@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs (or updates the settings of) a church's captioning backend on Google Cloud Run.
-# Safe to run again at any time. Normally run from Cloud Shell via the Setup page's
+# Safe to run again at any time. Normally run from Cloud Shell via the captions website's
 # "Install on Google Cloud" button.
 #
 #   ./deploy.sh                 install, or re-check an existing install

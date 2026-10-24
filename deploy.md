@@ -19,10 +19,10 @@ Soniox turns speech into captions and translations.
 3. Click **API keys**, then **Create API key**, and copy it.
 4. Come back to the terminal, paste the key and press **Enter**. Nothing appears while you paste. That's normal.
 
-If the terminal has closed or disconnected in the meantime, click **Install on Google Cloud** on the Setup page again. It carries on where it left off.
+If the terminal has closed or disconnected in the meantime, click **Install on Google Cloud** on the captions website again. It carries on where it left off.
 
 ## Finish
 
-When the terminal says **Done!**, open the link it prints. It takes you back to the Setup page with everything filled in.
+When the terminal says **Done!**, open the link it prints. It takes you back to the captions website, now set up as your sound desk, with the QR code and links to share.
 
 If something goes wrong, the terminal explains what to do. Running the install again is always safe.

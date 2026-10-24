@@ -29,7 +29,7 @@ cd backend && npm install && SONIOX_API_KEY=... npm run dev
 
 # frontend
 cd frontend && npm install && npm run dev
-# open http://localhost:5173/#setup and set the backend to http://localhost:8080
+# open http://localhost:5173/#setup&backend=http://localhost:8080&token=dev
 ```
 
 Tests: `cd backend && npm test`.
