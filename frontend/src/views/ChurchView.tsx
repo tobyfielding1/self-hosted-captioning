@@ -397,10 +397,12 @@ function Delete({ status }: { status: Status | null | undefined }) {
   const project = status?.project;
   return (
     <div className="space-y-3 pt-2">
+      <h3 className="font-semibold">Rotate the sound desk link</h3>
       <p>If the sound desk link got out, issue a new one. The old link stops working. The QR code stays the same. This page closes so it cannot keep using the old link.</p>
       <Button variant="secondary" onClick={startNewDeskLink}>
         Rotate sound desk link
       </Button>
+      <h3 className="font-semibold pt-3">Delete</h3>
       <p>
         Delete removes the captioning server and the Google Cloud project the install created
         {project ? ` (${project})` : ""}. Google keeps a deleted project for 30 days if you change your mind.
