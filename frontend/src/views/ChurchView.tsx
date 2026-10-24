@@ -12,8 +12,10 @@ const shellUrl = (tutorial: string) =>
   `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_tutorial=${tutorial}&show=terminal`;
 const INSTALL_URL = shellUrl("deploy.md");
 const ROTATE_URL = shellUrl("rotate.md");
+const NEWKEY_URL = shellUrl("newkey.md");
 const DELETE_URL = shellUrl("delete.md");
 const SONIOX_PROJECT = "https://console.soniox.com/org/projects/settings";
+const SONIOX_KEYS = "https://console.soniox.com/org/projects/api/keys";
 // Church images freeze their Node major version; below this they need a re-install.
 const MIN_NODE_MAJOR = 24;
 const TIP_DISMISSED = "captioning.fasterTipDismissed";
@@ -257,11 +259,11 @@ function Notices({ status }: { status: Status | null | undefined }) {
           <p className="font-semibold">Captions can be faster (optional)</p>
           <p>
             Your church is closer to Soniox's {status.sonioxFasterRegion.toUpperCase()} region. At console.soniox.com,
-            request access to that region, create a project in it, and make an API key there. Then click{" "}
-            <a className="underline" href={INSTALL_URL} target="_blank" rel="noreferrer">
-              Install on Google Cloud
+            request access to that region, create a project in it, and make an API key there. Then{" "}
+            <a className="underline" href={NEWKEY_URL} target="_blank" rel="noreferrer">
+              rotate the Soniox key
             </a>{" "}
-            and run <code>./deploy.sh --new-key</code>.
+            and paste that key when asked.
           </p>
         </Banner>
       )}
@@ -364,6 +366,14 @@ function Delete({ status }: { status: Status | null | undefined }) {
       <p>If the sound desk link got out, issue a new one. The old link stops working. The QR code stays the same. This page closes so it cannot keep using the old link.</p>
       <Button variant="secondary" onClick={startNewDeskLink}>
         Rotate sound desk link
+      </Button>
+      <h3 className="font-semibold pt-3">Rotate the Soniox key</h3>
+      <p>
+        If the Soniox key got out, or Soniox has stopped accepting it, put a new one on the server. The sound desk link
+        and QR code stay the same. When it finishes, <ExtLink href={SONIOX_KEYS}>delete the old key</ExtLink>.
+      </p>
+      <Button variant="secondary" onClick={() => window.open(NEWKEY_URL, "_blank", "noopener")}>
+        Rotate Soniox key
       </Button>
       <h3 className="font-semibold pt-3">Delete</h3>
       <p>
