@@ -25,10 +25,16 @@ for arg in "$@"; do
   esac
 done
 
+# gcloud must never stop to ask a question: its output is hidden, so a prompt would look like a hang.
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+LOG="$HOME/captioning-install.log"
+printf '=== %s install started\n' "$(date -u +%FT%TZ)" >"$LOG"
+
 # A spinner with a seconds counter, so quiet steps never look frozen. Any output stops it.
 SPIN_PID=""
 spin() {
   spin_stop
+  printf '%s %s\n' "$(date -u +%T)" "$1" >>"$LOG"
   if [ ! -t 1 ]; then printf '   %s...\n' "$1"; return 0; fi
   (
     frames='|/-\' i=0 start=$SECONDS
@@ -54,6 +60,7 @@ fail() {
   spin_stop
   printf '\n\033[1;31m%s\033[0m\n' "$1"
   [ -n "${2:-}" ] && printf '%s\n' "$2"
+  printf '\nDetails for your helper are saved in %s\n' "$LOG"
   printf '\nWhen that is fixed, run this again:  ./deploy.sh\n\n'
   exit 1
 }
@@ -63,29 +70,29 @@ trap 'fail "Something went wrong while ${STEP}." "Copy the text above and send i
 # --------------------------------------------------------------------------- project
 STEP="finding your Google Cloud project"
 bold "Setting up live captions"
-ACCOUNT="$(gcloud config get-value account 2>/dev/null || true)"
+ACCOUNT="$(gcloud config get-value account 2>>"$LOG" || true)"
 [ -n "$ACCOUNT" ] || fail "You're not signed in to Google Cloud." "Open this page from the church Google account: https://shell.cloud.google.com"
 
 spin "Looking for your captions project"
-PROJECT="$(gcloud projects list --filter="labels.${LABEL/=/:}" --format='value(projectId)' --limit=1 2>/dev/null || true)"
+PROJECT="$(gcloud projects list --filter="labels.${LABEL/=/:}" --format='value(projectId)' --limit=1 2>>"$LOG" || true)"
 if [ -z "$PROJECT" ]; then
   PROJECT="captioning-$(openssl rand -hex 3)"
   STEP="creating a Google Cloud project"
   note "Creating project ${PROJECT}..."
-  gcloud projects create "$PROJECT" --name="Live captions" --labels="$LABEL" --quiet >/dev/null 2>&1 ||
+  gcloud projects create "$PROJECT" --name="Live captions" --labels="$LABEL" --quiet >/dev/null 2>>"$LOG" ||
     fail "Google wouldn't let this account create a new project." \
       "This usually means the account has reached its project limit or belongs to an organisation that restricts projects. Ask your helper, or try a different Google account."
 fi
 note "Project: ${PROJECT}"
-gcloud config set project "$PROJECT" >/dev/null 2>&1
+gcloud config set project "$PROJECT" >/dev/null 2>>"$LOG"
 
 # --------------------------------------------------------------------------- billing
 STEP="checking billing"
 spin "Checking billing"
-BILLING="$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName)' 2>/dev/null || true)"
+BILLING="$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName)' 2>>"$LOG" || true)"
 BILLING="${BILLING#billingAccounts/}"
 if [ -z "$BILLING" ]; then
-  mapfile -t ACCOUNTS < <(gcloud billing accounts list --filter=open=true --format='value(name.basename(),displayName)' 2>/dev/null || true)
+  mapfile -t ACCOUNTS < <(gcloud billing accounts list --filter=open=true --format='value(name.basename(),displayName)' 2>>"$LOG" || true)
   if [ "${#ACCOUNTS[@]}" -eq 0 ]; then
     fail "Billing isn't set up on this Google account." \
       "Open https://console.cloud.google.com/billing/create, add a card (normal use stays within the free tier), then run this again."
@@ -98,7 +105,7 @@ if [ -z "$BILLING" ]; then
     [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#ACCOUNTS[@]}" ] || fail "That wasn't one of the numbers."
     BILLING="$(cut -f1 <<<"${ACCOUNTS[$((CHOICE - 1))]}")"
   fi
-  gcloud billing projects link "$PROJECT" --billing-account="$BILLING" >/dev/null 2>&1 ||
+  gcloud billing projects link "$PROJECT" --billing-account="$BILLING" >/dev/null 2>>"$LOG" ||
     fail "Couldn't connect billing to the project." "Make sure this Google account can manage billing account ${BILLING}, then run this again."
 fi
 note "Billing: connected"
@@ -106,31 +113,32 @@ note "Billing: connected"
 # --------------------------------------------------------------------------- services
 STEP="turning on Google Cloud services"
 spin "Turning on Google Cloud services (a few minutes the first time)"
-ERRLOG="$(mktemp)"
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
-  translate.googleapis.com billingbudgets.googleapis.com cloudresourcemanager.googleapis.com --quiet >/dev/null 2>"$ERRLOG" ||
-  { spin_stop; cat "$ERRLOG"; fail "Couldn't turn on the Google Cloud services."; }
+  translate.googleapis.com billingbudgets.googleapis.com cloudresourcemanager.googleapis.com --quiet >/dev/null 2>>"$LOG" ||
+  fail "Couldn't turn on the Google Cloud services."
 note "Services: on"
 
 # --------------------------------------------------------------------------- region
 STEP="choosing the closest region"
-spin "Choosing the closest region"
+spin "Checking for an existing install"
 REGION="${REGION:-}"
-EXISTING_REGION="$(gcloud run services list --filter="metadata.name=${SERVICE}" --format='value(region)' --limit=1 2>/dev/null || true)"
+EXISTING_REGION="$(timeout 120 gcloud run services list --filter="metadata.name=${SERVICE}" --format='value(region)' --limit=1 2>>"$LOG" || true)"
 if [ -z "$REGION" ] && [ -n "$EXISTING_REGION" ] && ! $RESELECT; then REGION="$EXISTING_REGION"; fi
 if [ -z "$REGION" ]; then
-  RUN_REGIONS="$(gcloud run regions list --format='value(locationId)')"
+  spin "Choosing the closest region"
+  RUN_REGIONS="$(timeout 120 gcloud run regions list --format='value(locationId)' 2>>"$LOG" || true)"
   # Cloud Shell is placed in the Google Cloud region closest to the person using it.
-  ZONE="$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/zone 2>/dev/null || true)"
+  ZONE="$(curl -sf -m 3 -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/zone 2>>"$LOG" || true)"
   CANDIDATE="${ZONE##*/}"
   CANDIDATE="${CANDIDATE%-*}"
-  if [ -n "$CANDIDATE" ] && grep -qx "$CANDIDATE" <<<"$RUN_REGIONS"; then
+  printf 'cloud shell zone=%s regions=%s\n' "$ZONE" "$(wc -w <<<"$RUN_REGIONS")" >>"$LOG"
+  if [ -n "$CANDIDATE" ] && { [ -z "$RUN_REGIONS" ] || grep -qx "$CANDIDATE" <<<"$RUN_REGIONS"; }; then
     REGION="$CANDIDATE"
   else
     spin "Measuring which region is fastest from here"
     BEST_MS=999999
     for r in $RUN_REGIONS; do
-      t="$(curl -s -o /dev/null -m 3 -w '%{time_connect}' "https://${r}-run.googleapis.com/" 2>/dev/null || echo 9)"
+      t="$(curl -s -o /dev/null -m 3 -w '%{time_connect}' "https://${r}-run.googleapis.com/" 2>>"$LOG" || echo 9)"
       ms="$(awk -v t="$t" 'BEGIN { printf "%d", t * 1000 }')"
       if [ "$ms" -gt 0 ] && [ "$ms" -lt "$BEST_MS" ]; then BEST_MS="$ms" REGION="$r"; fi
     done
@@ -144,8 +152,8 @@ STEP="reading the current settings"
 CURRENT_ENV="{}"
 if [ -n "$EXISTING_REGION" ]; then
   spin "Reading the current settings"
-  CURRENT_ENV="$(gcloud run services describe "$SERVICE" --region="$EXISTING_REGION" --format=json 2>/dev/null |
-    python3 -c 'import json,sys; s=json.load(sys.stdin); c=s["spec"]["template"]["spec"]["containers"][0]; print(json.dumps({e["name"]: e.get("value","") for e in c.get("env",[])}))' 2>/dev/null || echo '{}')"
+  CURRENT_ENV="$(gcloud run services describe "$SERVICE" --region="$EXISTING_REGION" --format=json 2>>"$LOG" |
+    python3 -c 'import json,sys; s=json.load(sys.stdin); c=s["spec"]["template"]["spec"]["containers"][0]; print(json.dumps({e["name"]: e.get("value","") for e in c.get("env",[])}))' 2>>"$LOG" || echo '{}')"
 fi
 env_value() { python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get(sys.argv[2], ""))' "$CURRENT_ENV" "$1"; }
 KEY="$(env_value SONIOX_API_KEY)"
@@ -186,13 +194,13 @@ STEP="setting up permissions"
 spin "Setting up permissions"
 RUN_SA="captioning-run@${PROJECT}.iam.gserviceaccount.com"
 BUILD_SA="captioning-build@${PROJECT}.iam.gserviceaccount.com"
-gcloud iam service-accounts describe "$RUN_SA" >/dev/null 2>&1 ||
+gcloud iam service-accounts describe "$RUN_SA" >/dev/null 2>>"$LOG" ||
   gcloud iam service-accounts create captioning-run --display-name="Captioning server" --quiet >/dev/null
-gcloud iam service-accounts describe "$BUILD_SA" >/dev/null 2>&1 ||
+gcloud iam service-accounts describe "$BUILD_SA" >/dev/null 2>>"$LOG" ||
   gcloud iam service-accounts create captioning-build --display-name="Captioning build" --quiet >/dev/null
 grant() {
   local tries=0
-  until gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$1" --role="$2" --condition=None --quiet >/dev/null 2>&1; do
+  until gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$1" --role="$2" --condition=None --quiet >/dev/null 2>>"$LOG"; do
     tries=$((tries + 1))
     [ "$tries" -lt 6 ] || return 1
     sleep 5 # new service accounts take a few seconds to appear
@@ -204,12 +212,12 @@ grant "$BUILD_SA" roles/run.builder
 # --------------------------------------------------------------------------- budget alert
 STEP="creating a budget alert"
 spin "Checking the budget alert"
-if [ -n "$BILLING" ] || BILLING="$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName.basename())' 2>/dev/null)"; then
-  if [ -z "$(gcloud billing budgets list --billing-account="$BILLING" --filter="displayName='Live captions alert'" --format='value(name)' 2>/dev/null || true)" ]; then
-    CURRENCY="$(gcloud billing accounts describe "$BILLING" --format='value(currencyCode)' 2>/dev/null || echo GBP)"
+if [ -n "$BILLING" ] || BILLING="$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName.basename())' 2>>"$LOG")"; then
+  if [ -z "$(gcloud billing budgets list --billing-account="$BILLING" --filter="displayName='Live captions alert'" --format='value(name)' 2>>"$LOG" || true)" ]; then
+    CURRENCY="$(gcloud billing accounts describe "$BILLING" --format='value(currencyCode)' 2>>"$LOG" || echo GBP)"
     if gcloud billing budgets create --billing-account="$BILLING" --display-name="Live captions alert" \
       --budget-amount="5${CURRENCY}" --filter-projects="projects/${PROJECT}" \
-      --threshold-rule=percent=0.5 --threshold-rule=percent=1.0 >/dev/null 2>&1; then
+      --threshold-rule=percent=0.5 --threshold-rule=percent=1.0 >/dev/null 2>>"$LOG"; then
       note "Budget alert: you'll get an email if spending passes 5 ${CURRENCY} a month"
     else
       note "Budget alert: skipped (this account can't create budgets; that's fine)"
