@@ -11,6 +11,7 @@ const REPO = "https://github.com/tobyfielding1/self-hosted-captioning";
 const shellUrl = (tutorial: string) =>
   `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_tutorial=${tutorial}&show=terminal`;
 const INSTALL_URL = shellUrl("deploy.md");
+const ANOTHER_URL = shellUrl("another.md");
 const ROTATE_URL = shellUrl("rotate.md");
 const NEWKEY_URL = shellUrl("newkey.md");
 const DELETE_URL = shellUrl("delete.md");
@@ -116,6 +117,18 @@ function Wizard() {
           <p className="text-sm text-gray-600">
             Already installed but lost the link? Click Install on Google Cloud again: it prints the same link.
           </p>
+          <p className="text-lg">Another church or room, even with this same Google account in this browser?</p>
+          <a
+            href={ANOTHER_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50"
+          >
+            Set up another church
+          </a>
+          <p className="text-sm text-gray-600">
+            It creates a separate server and prints that church's own link. Open the link here. Each address is its own church.
+          </p>
           <Button variant="secondary" onClick={() => setStep(1)}>
             Back
           </Button>
@@ -208,7 +221,10 @@ function Finished({
         </Button>
 
         <h3 className="font-semibold pt-3">Other churches</h3>
-        <p>Share this so another church can set up the same captions. It starts their own install; it does not use yours.</p>
+        <p>
+          Share this so another church can set up the same captions. On that page, "Set up another church" keeps this one
+          separate, including on the same Google account and in this browser.
+        </p>
         <div className="flex flex-wrap gap-3">
           <Button onClick={() => copy("churches", site)}>{copied === "churches" ? "Copied" : "Copy link"}</Button>
           <a className="inline-block underline text-blue-800 self-center" href={site} target="_blank" rel="noreferrer">
@@ -373,6 +389,14 @@ function Delete({ status }: { status: Status | null | undefined }) {
       </p>
       <Button variant="secondary" onClick={() => window.open(NEWKEY_URL, "_blank", "noopener")}>
         Rotate Soniox key
+      </Button>
+      <h3 className="font-semibold pt-3">Set up another church</h3>
+      <p>
+        Creates a separate captions server on this Google account. This church's link and QR code stay the same. Open the
+        new link it prints, in this browser or any other.
+      </p>
+      <Button variant="secondary" onClick={() => window.open(ANOTHER_URL, "_blank", "noopener")}>
+        Set up another church
       </Button>
       <h3 className="font-semibold pt-3">Delete</h3>
       <p>

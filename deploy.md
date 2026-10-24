@@ -16,6 +16,8 @@ Click the **copy** button on the box below (it pastes into the terminal at the b
 
 Google Cloud now sets itself up, which takes a few minutes. You don't need to wait: click **Next** and get your Soniox key while it works.
 
+To add another church on this same Google account, go back to the captions website and choose **Set up another church**. If this account already has several, the terminal asks which one you mean.
+
 ## Get your Soniox key while it works
 
 Soniox turns speech into captions and translations.

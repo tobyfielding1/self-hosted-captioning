@@ -53,8 +53,27 @@ ACCOUNT="$(gcloud config get-value account 2>>"$LOG" || true)"
 
 STEP="finding your Google Cloud project"
 spin "Looking for your captions project"
-PROJECT="$(gcloud projects list --filter="labels.${LABEL/=/:}" --format='value(projectId)' --limit=1 2>>"$LOG" || true)"
-[ -n "$PROJECT" ] || fail "There's no captions project on this Google account." "Nothing to delete. If captions were installed on a different Google account, sign in as that account and run this again."
+mapfile -t PROJECTS < <(gcloud projects list --filter="labels.${LABEL/=/:}" --format='value(projectId)' 2>>"$LOG" || true)
+[ "${#PROJECTS[@]}" -gt 0 ] || fail "There's no captions project on this Google account." "Nothing to delete. If captions were installed on a different Google account, sign in as that account and run this again."
+if [ "${#PROJECTS[@]}" -eq 1 ]; then
+  PROJECT="${PROJECTS[0]}"
+else
+  project_line() {
+    local url=""
+    url="$(timeout 20 gcloud run services list --project="$1" --filter="metadata.name=${SERVICE}" --format='value(status.url)' --limit=1 2>>"$LOG" || true)"
+    if [ -n "$url" ]; then printf '%s — %s' "$1" "$url"; else printf '%s' "$1"; fi
+  }
+  spin "Looking up each captions server"
+  LINES=()
+  for id in "${PROJECTS[@]}"; do LINES+=("$(project_line "$id")"); done
+  spin_stop
+  bold "This Google account has more than one captions setup."
+  for i in "${!PROJECTS[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${LINES[$i]}"; done
+  note "Type the number of the one to delete."
+  read -rp "   Number: " CHOICE
+  [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#PROJECTS[@]}" ] || fail "That wasn't one of the numbers. Nothing was deleted."
+  PROJECT="${PROJECTS[$((CHOICE - 1))]}"
+fi
 note "Project: ${PROJECT}"
 
 BILLING="$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName)' 2>>"$LOG" || true)"
@@ -72,7 +91,21 @@ read -rp "   Type the project name to confirm: " CONFIRM
 if [ -n "$BILLING" ]; then
   STEP="removing the budget alert"
   spin "Removing the budget alert"
-  BUDGET="$(gcloud billing budgets list --billing-account="$BILLING" --filter="displayName='Live captions alert'" --format='value(name)' --limit=1 2>>"$LOG" || true)"
+  BUDGET="$(gcloud billing budgets list --billing-account="$BILLING" --format=json 2>>"$LOG" | python3 -c '
+import json, sys
+want = "projects/" + sys.argv[1]
+try:
+    items = json.load(sys.stdin)
+except Exception:
+    items = []
+if isinstance(items, dict):
+    items = items.get("budgets") or items.get("items") or []
+for b in items:
+    projects = ((b.get("budgetFilter") or {}).get("projects")) or []
+    if b.get("displayName") == "Live captions alert" and want in projects:
+        print(b.get("name") or "")
+        break
+' "$PROJECT" || true)"
   if [ -n "$BUDGET" ]; then
     gcloud billing budgets delete "$BUDGET" --billing-account="$BILLING" --quiet >/dev/null 2>>"$LOG" ||
       note "Couldn't remove the budget alert (that's fine; you can delete it later in Billing)."

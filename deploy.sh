@@ -4,6 +4,7 @@
 # "Install on Google Cloud" button.
 #
 #   ./deploy.sh                 install, or re-check an existing install
+#   ./deploy.sh --new-project   another church on this same Google account
 #   ./deploy.sh --new-key       replace the Soniox key
 #   ./deploy.sh --rotate-token  issue a new sound desk link (the old one stops working)
 #   ./deploy.sh --reselect      support use: pick the Cloud Run region again
@@ -15,15 +16,20 @@ APP_URL="https://tobyfielding1.github.io/self-hosted-captioning/"
 SERVICE="captioning"
 LABEL="app=captioning"
 
-NEW_KEY=false ROTATE=false RESELECT=false
+NEW_KEY=false ROTATE=false RESELECT=false NEW_PROJECT=false
 for arg in "$@"; do
   case "$arg" in
     --new-key) NEW_KEY=true ;;
+    --new-project) NEW_PROJECT=true ;;
     --rotate-token) ROTATE=true ;;
     --reselect) RESELECT=true ;;
     *) echo "Unknown option: $arg"; exit 2 ;;
   esac
 done
+if $NEW_PROJECT && $ROTATE; then
+  echo "Use either --new-project or --rotate-token."
+  exit 2
+fi
 
 # gcloud must never stop to ask a question: its output is hidden, so a prompt would look like a hang.
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
@@ -84,15 +90,53 @@ bold "Setting up live captions"
 ACCOUNT="$(gcloud config get-value account 2>>"$LOG" || true)"
 [ -n "$ACCOUNT" ] || fail "You're not signed in to Google Cloud." "Open this page from the church Google account: https://shell.cloud.google.com"
 
-spin "Looking for your captions project"
-PROJECT="$(gcloud projects list --filter="labels.${LABEL/=/:}" --format='value(projectId)' --limit=1 2>>"$LOG" || true)"
-if [ -z "$PROJECT" ]; then
+create_project() {
   PROJECT="captioning-$(openssl rand -hex 3)"
   STEP="creating a Google Cloud project"
   note "Creating project ${PROJECT}..."
   gcloud projects create "$PROJECT" --name="Live captions" --labels="$LABEL" --quiet >/dev/null 2>>"$LOG" ||
     fail "Google wouldn't let this account create a new project." \
       "This usually means the account has reached its project limit or belongs to an organisation that restricts projects. Ask your helper, or try a different Google account."
+}
+project_line() {
+  local url=""
+  url="$(timeout 20 gcloud run services list --project="$1" --filter="metadata.name=${SERVICE}" --format='value(status.url)' --limit=1 2>>"$LOG" || true)"
+  if [ -n "$url" ]; then printf '%s — %s' "$1" "$url"; else printf '%s' "$1"; fi
+}
+
+if $NEW_PROJECT; then
+  create_project
+else
+  spin "Looking for your captions project"
+  mapfile -t PROJECTS < <(gcloud projects list --filter="labels.${LABEL/=/:}" --format='value(projectId)' 2>>"$LOG" || true)
+  if [ "${#PROJECTS[@]}" -eq 0 ]; then
+    if $ROTATE; then
+      fail "There's no captioning server on this Google account." "Install first, or sign in as the church Google account that did."
+    fi
+    create_project
+  elif [ "${#PROJECTS[@]}" -eq 1 ]; then
+    PROJECT="${PROJECTS[0]}"
+  else
+    spin "Looking up each captions server"
+    LINES=()
+    for id in "${PROJECTS[@]}"; do LINES+=("$(project_line "$id")"); done
+    spin_stop
+    bold "This Google account has more than one captions setup."
+    for i in "${!PROJECTS[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${LINES[$i]}"; done
+    if $ROTATE || $NEW_KEY; then
+      note "Type the number of the one you want."
+      read -rp "   Number: " CHOICE
+    else
+      note "Type the number of the one you want, or type new for another church."
+      read -rp "   Choice: " CHOICE
+    fi
+    if [ "$CHOICE" = new ] && ! $ROTATE && ! $NEW_KEY; then
+      create_project
+    else
+      [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#PROJECTS[@]}" ] || fail "That wasn't one of the choices."
+      PROJECT="${PROJECTS[$((CHOICE - 1))]}"
+    fi
+  fi
 fi
 note "Project: ${PROJECT}"
 gcloud config set project "$PROJECT" >/dev/null 2>>"$LOG"
