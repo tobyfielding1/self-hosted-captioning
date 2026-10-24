@@ -14,8 +14,10 @@ const log = (severity, message, extra = {}) => console.log(JSON.stringify({ seve
 
 async function download() {
   const signal = AbortSignal.timeout(2000);
+  // The query string sidesteps GitHub's download cache, which can serve a stale pair for minutes.
+  const bust = Date.now();
   const get = async (name) => {
-    const res = await fetch(`${RELEASE}/${name}`, { signal });
+    const res = await fetch(`${RELEASE}/${name}?t=${bust}`, { signal, cache: "no-store" });
     if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
     return Buffer.from(await res.arrayBuffer());
   };
