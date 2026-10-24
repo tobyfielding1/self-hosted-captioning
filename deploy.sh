@@ -221,19 +221,33 @@ background() {
   fi
 
   # The Soniox key is added afterwards (a quick settings change), so the build doesn't wait for it.
+  # A new build account is often denied for a minute or two after its role is granted.
   step "Building the captioning server (about 3 minutes)"
-  gcloud run deploy "$SERVICE" \
-    --source backend \
-    --region "$REGION" \
-    --allow-unauthenticated \
-    --max-instances=1 --min-instances=0 \
-    --timeout=3600 --concurrency=1000 \
-    --cpu=1 --memory=512Mi \
-    --service-account="$run_sa" \
-    --build-service-account="projects/${PROJECT}/serviceAccounts/${build_sa}" \
-    --update-env-vars="SPEAKER_TOKEN=${TOKEN},BILLING_ACCOUNT=${BILLING}" \
-    --quiet ||
-    die "building the captioning server"
+  local attempt=0
+  while :; do
+    if gcloud run deploy "$SERVICE" \
+      --source backend \
+      --region "$REGION" \
+      --allow-unauthenticated \
+      --max-instances=1 --min-instances=0 \
+      --timeout=3600 --concurrency=1000 \
+      --cpu=1 --memory=512Mi \
+      --service-account="$run_sa" \
+      --build-service-account="projects/${PROJECT}/serviceAccounts/${build_sa}" \
+      --update-env-vars="SPEAKER_TOKEN=${TOKEN},BILLING_ACCOUNT=${BILLING}" \
+      --quiet >"$WORK/deploy.out" 2>&1; then
+      cat "$WORK/deploy.out"
+      break
+    fi
+    cat "$WORK/deploy.out"
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 6 ] || ! grep -q "missing required IAM permissions" "$WORK/deploy.out"; then
+      die "building the captioning server"
+    fi
+    step "Waiting for Google to apply the new permissions"
+    sleep 30
+    step "Building the captioning server (about 3 minutes)"
+  done
 }
 background >>"$LOG" 2>&1 &
 BG_PID=$!
