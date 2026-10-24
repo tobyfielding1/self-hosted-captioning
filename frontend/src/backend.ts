@@ -69,29 +69,12 @@ export function initFromUrl() {
   if (location.hash) history.replaceState(null, "", `${location.pathname}${location.search}`);
 }
 
-/** Sound desk / finish links: `#backend=&token=`. Older `#setup` / `#speak` links still parse. */
-export function deskLinkParts(url: string): { backend: string; token: string } | null {
-  try {
-    const params = linkParams(url.trim());
-    const backend = params.get("backend");
-    const token = params.get("token");
-    return backend && token ? { backend, token } : null;
-  } catch {
-    return null;
-  }
-}
-
 export function getBackend(): string | null {
   const fromQuery = new URLSearchParams(location.search).get("backend");
   return fromQuery ? clean(fromQuery) : localStorage.getItem(KEYS.backend);
 }
 
-export function setBackend(url: string) {
-  localStorage.setItem(KEYS.backend, clean(url));
-}
-
 export const getToken = () => localStorage.getItem(KEYS.token);
-export const setToken = (token: string) => localStorage.setItem(KEYS.token, token.trim());
 export const clearToken = () => localStorage.removeItem(KEYS.token);
 
 export function wsUrl(path: string, params: Record<string, string>): string {

@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { clearToken, deskLinkParts, getBackend, getStatus, getToken, listenerLink, protocolSupported, setBackend, setToken, speakLink, type Status } from "../backend";
+import { clearToken, getBackend, getStatus, getToken, listenerLink, protocolSupported, speakLink, type Status } from "../backend";
 import { Banner, Button, Card, copyText, Details } from "../ui";
 import SpeakView from "./SpeakView";
 
@@ -20,9 +20,8 @@ const TIP_DISMISSED = "captioning.fasterTipDismissed";
 
 /** The church team's page: the setup wizard until this device has a link, then the sound desk plus sharing. */
 export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
-  const [backend, setB] = useState(getBackend());
-  const [token, setT] = useState(getToken());
-  const [justInstalled, setJustInstalled] = useState(false);
+  const [backend] = useState(getBackend());
+  const [token] = useState(getToken());
   const [status, setStatus] = useState<Status | null | undefined>(undefined);
   const installed = !!backend && !!token;
 
@@ -30,14 +29,6 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
     if (!backend) return;
     void getStatus(backend).then(setStatus);
   }, [backend]);
-
-  const save = (b: string, t: string) => {
-    setBackend(b);
-    setToken(t);
-    setB(getBackend());
-    setT(getToken());
-    setJustInstalled(true);
-  };
 
   return (
     <main className="max-w-2xl mx-auto p-4 space-y-4 print:p-0 print:max-w-none">
@@ -48,14 +39,14 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
             settings={<Delete status={status} />}
             extras={(panels) => (
               <>
-                <Finished backend={backend!} token={token!} open={shareOpen || justInstalled} status={status} />
+                <Finished backend={backend!} token={token!} open={shareOpen} status={status} />
                 <div className="space-y-4 print:hidden">{panels}</div>
               </>
             )}
           />
         </>
       ) : (
-        <Wizard onSave={save} />
+        <Wizard />
       )}
     </main>
   );
@@ -63,16 +54,8 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
 
 // ---------------------------------------------------------------------------- wizard
 
-function Wizard({ onSave }: { onSave: (b: string, t: string) => void }) {
+function Wizard() {
   const [step, setStep] = useState(1);
-  const [pasted, setPasted] = useState("");
-  const [pasteError, setPasteError] = useState(false);
-
-  const usePasted = () => {
-    const parts = deskLinkParts(pasted);
-    if (!parts) return setPasteError(true);
-    onSave(parts.backend, parts.token);
-  };
 
   return (
     <>
@@ -128,29 +111,9 @@ function Wizard({ onSave }: { onSave: (b: string, t: string) => void }) {
           <p className="text-lg">
             When it says <strong>Done!</strong>, open the link it prints. It brings you back here with everything filled in.
           </p>
-          <div className="pt-2 space-y-2">
-            <label className="block font-semibold" htmlFor="finish-link">
-              Or paste the link it printed, or a sound desk link:
-            </label>
-            <div className="flex gap-2">
-              <input
-                id="finish-link"
-                value={pasted}
-                onChange={(e) => {
-                  setPasted(e.target.value);
-                  setPasteError(false);
-                }}
-                className="flex-1 rounded-xl border-2 border-gray-300 px-3 py-2"
-              />
-              <Button onClick={usePasted} disabled={!pasted.trim()}>
-                Continue
-              </Button>
-            </div>
-            {pasteError && <p className="text-red-700">That doesn't look like the right link. Copy the whole line after "Done!".</p>}
-            <p className="text-sm text-gray-600">
-              Already installed but lost the link? Click Install on Google Cloud again: it prints the same link.
-            </p>
-          </div>
+          <p className="text-sm text-gray-600">
+            Already installed but lost the link? Click Install on Google Cloud again: it prints the same link.
+          </p>
           <Button variant="secondary" onClick={() => setStep(1)}>
             Back
           </Button>
