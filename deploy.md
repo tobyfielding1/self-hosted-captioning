@@ -8,7 +8,7 @@ Click the **copy** button on the box below (it pastes into the terminal at the b
 git pull -q --ff-only; ./deploy.sh
 ```
 
-Google Cloud now sets itself up, which takes a few minutes. You don't need to wait: click **Next** and get your Soniox key while it works.
+Google Cloud now sets itself up, which takes a few minutes. You don't need to wait: click the button at the bottom of this panel and get your Soniox key while it works.
 
 ## Get your Soniox key while it works
 
