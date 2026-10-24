@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { deskLinkParts, getBackend, getStatus, getToken, listenerLink, protocolSupported, setBackend, setToken, speakLink, type Status } from "../backend";
+import { clearToken, deskLinkParts, getBackend, getStatus, getToken, listenerLink, protocolSupported, setBackend, setToken, speakLink, type Status } from "../backend";
 import { Banner, Button, Card, copyText, Details } from "../ui";
 import SpeakView from "./SpeakView";
 
@@ -379,15 +379,23 @@ function Spending({ status }: { status: Status | null | undefined }) {
   );
 }
 
+function startNewDeskLink() {
+  const shell = window.open(ROTATE_URL, "_blank");
+  if (!shell) return;
+  shell.opener = null;
+  clearToken();
+  window.close();
+  location.replace(`${location.origin}${location.pathname}`);
+}
+
 function Delete({ status }: { status: Status | null | undefined }) {
   const project = status?.project;
   return (
     <div className="space-y-3 pt-2">
-      <p>If the sound desk link got out, issue a new one. The old link stops working. The QR code stays the same.</p>
-      <p>Open the new link the terminal prints on this computer. Copy link then copies that new one. A tab left open still copies the old link until you reload it.</p>
-      <a href={ROTATE_URL} target="_blank" rel="noreferrer" className="inline-block underline text-blue-800">
+      <p>If the sound desk link got out, issue a new one. The old link stops working. The QR code stays the same. This page closes so it cannot keep using the old link.</p>
+      <button type="button" onClick={startNewDeskLink} className="inline-block underline text-blue-800 text-left">
         New sound desk link
-      </a>
+      </button>
       <p>
         Delete removes the captioning server and the Google Cloud project the install created
         {project ? ` (${project})` : ""}. Google keeps a deleted project for 30 days if you change your mind.

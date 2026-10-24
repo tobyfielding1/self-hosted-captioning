@@ -90,6 +90,7 @@ export function setBackend(url: string) {
 
 export const getToken = () => localStorage.getItem(KEYS.token);
 export const setToken = (token: string) => localStorage.setItem(KEYS.token, token.trim());
+export const clearToken = () => localStorage.removeItem(KEYS.token);
 
 export function wsUrl(path: string, params: Record<string, string>): string {
   const base = getBackend()!.replace(/^http/, "ws");
