@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { getBackend, getStatus, getToken, listenerLink, protocolSupported, setBackend, setToken, speakLink, type Status } from "../backend";
+import { deskLinkParts, getBackend, getStatus, getToken, listenerLink, protocolSupported, setBackend, setToken, speakLink, type Status } from "../backend";
 import { Banner, Button, Card, copyText, Details } from "../ui";
 import SpeakView from "./SpeakView";
 
@@ -62,16 +62,9 @@ function Wizard({ onSave }: { onSave: (b: string, t: string) => void }) {
   const [pasteError, setPasteError] = useState(false);
 
   const usePasted = () => {
-    try {
-      const hash = new URL(pasted.trim()).hash.replace(/^#/, "").split("&").slice(1).join("&");
-      const params = new URLSearchParams(hash);
-      const b = params.get("backend");
-      const t = params.get("token");
-      if (!b || !t) throw new Error();
-      onSave(b, t);
-    } catch {
-      setPasteError(true);
-    }
+    const parts = deskLinkParts(pasted);
+    if (!parts) return setPasteError(true);
+    onSave(parts.backend, parts.token);
   };
 
   return (
@@ -177,7 +170,7 @@ function Finished({
   const canvas = useRef<HTMLCanvasElement>(null);
   const listen = listenerLink(backend);
   const speak = speakLink(backend, token);
-  const setup = `${location.origin}${location.pathname}#setup`;
+  const site = `${location.origin}${location.pathname}`;
 
   useEffect(() => {
     if (canvas.current) void QRCode.toCanvas(canvas.current, listen, { width: 280, margin: 2, errorCorrectionLevel: "M" });
@@ -245,9 +238,9 @@ function Finished({
         <h3 className="font-semibold pt-3">Other churches</h3>
         <p>Share this so another church can set up the same captions. It starts their own install; it does not use yours.</p>
         <div className="flex flex-wrap gap-3">
-          <Button onClick={() => copy("churches", setup)}>{copied === "churches" ? "Copied" : "Copy link"}</Button>
-          <a className="inline-block underline text-blue-800 self-center" href={setup} target="_blank" rel="noreferrer">
-            Open the setup page
+          <Button onClick={() => copy("churches", site)}>{copied === "churches" ? "Copied" : "Copy link"}</Button>
+          <a className="inline-block underline text-blue-800 self-center" href={site} target="_blank" rel="noreferrer">
+            Open the page
           </a>
         </div>
       </Details>

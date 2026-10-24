@@ -3,7 +3,20 @@ export const SUPPORTED_PROTOCOLS = [1];
 
 const KEYS = { backend: "captioning.backend", token: "captioning.token" } as const;
 
-export type View = "setup" | "speak" | "listen";
+export type View = "church" | "speak" | "listen";
+
+/** First hash segment is a view name; anything else is treated as parameters. Old `#setup` links still work. */
+const HASH_VIEWS = new Set(["setup", "speak", "listen"]);
+
+function linkParams(url = location.href): URLSearchParams {
+  const parsed = new URL(url, location.origin);
+  const segs = parsed.hash.replace(/^#/, "").split("&").filter((s) => s.length > 0);
+  const rest = HASH_VIEWS.has(segs[0] ?? "") ? segs.slice(1) : segs;
+  const params = new URLSearchParams(rest.join("&"));
+  const fromQuery = parsed.searchParams.get("backend");
+  if (fromQuery && !params.has("backend")) params.set("backend", fromQuery);
+  return params;
+}
 
 export interface Status {
   live: boolean;
@@ -28,36 +41,45 @@ export interface Languages {
   targets: { code: string; via: "soniox" | "google"; name?: string }[];
 }
 
-function hashParams(): URLSearchParams {
-  const [, ...rest] = location.hash.replace(/^#/, "").split("&");
-  return new URLSearchParams(rest.join("&"));
-}
-
 export function currentView(): View {
   const view = location.hash.replace(/^#/, "").split("&")[0];
-  if (view === "setup" || view === "speak" || view === "listen") return view;
-  return new URLSearchParams(location.search).has("backend") ? "listen" : "setup";
+  if (view === "listen") return "listen";
+  if (view === "speak") return "speak";
+  return new URLSearchParams(location.search).has("backend") ? "listen" : "church";
 }
 
 const clean = (url: string) => url.trim().replace(/\/+$/, "");
 
+/** True when this page load came from an install finish link (not a sound desk `#speak` link). */
+let shareAfterLink = false;
+export const shouldOpenShare = () => shareAfterLink;
+
 /**
- * Picks up `?backend=` (listener links) and `#...&backend=&token=` (sound desk and finish links),
+ * Picks up `?backend=` (listener links) and `#backend=&token=` (sound desk and finish links),
  * remembers them, and removes the token from the address bar.
  */
 export function initFromUrl() {
-  const query = new URLSearchParams(location.search);
-  const hash = hashParams();
-  const backend = hash.get("backend") ?? query.get("backend");
+  const params = linkParams();
+  const backend = params.get("backend");
   if (backend) localStorage.setItem(KEYS.backend, clean(backend));
-  const token = hash.get("token");
+  const token = params.get("token");
   if (token) {
     localStorage.setItem(KEYS.token, token.trim());
-    hash.delete("token");
-    hash.delete("backend");
     const view = location.hash.replace(/^#/, "").split("&")[0];
-    const rest = hash.toString();
-    history.replaceState(null, "", `${location.pathname}${location.search}#${view}${rest ? `&${rest}` : ""}`);
+    shareAfterLink = view !== "speak";
+    history.replaceState(null, "", `${location.pathname}${location.search}${view === "speak" ? "#speak" : view === "listen" ? "#listen" : ""}`);
+  }
+}
+
+/** Sound desk / finish links: `#backend=&token=` or the older `#setup&backend=&token=` / `#speak&...`. */
+export function deskLinkParts(url: string): { backend: string; token: string } | null {
+  try {
+    const params = linkParams(url.trim());
+    const backend = params.get("backend");
+    const token = params.get("token");
+    return backend && token ? { backend, token } : null;
+  } catch {
+    return null;
   }
 }
 

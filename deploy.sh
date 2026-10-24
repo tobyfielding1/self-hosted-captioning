@@ -322,5 +322,5 @@ if [ "$CODE" = "403" ]; then
 fi
 
 bold "Done! Open this link to finish:"
-printf '\n   %s#setup&backend=%s&token=%s\n\n' "$APP_URL" "$URL" "$TOKEN"
+printf '\n   %s#backend=%s&token=%s\n\n' "$APP_URL" "$URL" "$TOKEN"
 note "Keep that link private: it includes the sound desk's access."

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { currentView, type View } from "./backend";
+import { currentView, shouldOpenShare, type View } from "./backend";
 import ChurchView from "./views/ChurchView";
 import ListenView from "./views/ListenView";
 
@@ -19,10 +19,9 @@ export default function App() {
 
   if (view === "listen") return <ListenView />;
 
-  // "#setup" (the install's finish link) opens the sharing section; "#speak" (the sound desk link) keeps it folded.
   return (
     <div className="min-h-full bg-gray-100 text-gray-900 print:bg-white">
-      <ChurchView shareOpen={view === "setup"} />
+      <ChurchView shareOpen={shouldOpenShare()} />
     </div>
   );
 }

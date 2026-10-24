@@ -3,7 +3,7 @@
 Live captions and translation for church services. Each church runs its own tiny
 backend on its own Google Cloud free tier; the web app is hosted on GitHub Pages.
 
-- **Church setup:** open https://tobyfielding1.github.io/self-hosted-captioning/#setup and follow the two steps.
+- **Church setup:** open https://tobyfielding1.github.io/self-hosted-captioning/ and follow the two steps.
 - **Sound desk:** open the sound desk link, check the bar moves, press Start.
 - **Congregation:** scan the QR code, pick a language, read.
 
@@ -29,7 +29,7 @@ cd backend && npm install && SONIOX_API_KEY=... npm run dev
 
 # frontend
 cd frontend && npm install && npm run dev
-# open http://localhost:5173/#setup&backend=http://localhost:8080&token=dev
+# open http://localhost:5173/#backend=http://localhost:8080&token=dev
 ```
 
 Tests: `cd backend && npm test`.
