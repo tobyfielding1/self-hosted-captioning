@@ -117,17 +117,18 @@ function Wizard() {
           <p className="text-sm text-gray-600">
             Already installed but lost the link? Click Install on Google Cloud again: it prints the same link.
           </p>
-          <p className="text-lg">Another church or room, even with this same Google account in this browser?</p>
+          <p className="text-lg">Two sessions at once, even with this same Google account in this browser?</p>
           <a
             href={ANOTHER_URL}
             target="_blank"
             rel="noreferrer"
             className="inline-block bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50"
           >
-            Set up another church
+            Set up another venue
           </a>
           <p className="text-sm text-gray-600">
-            It creates a separate server and prints that church's own link. Open the link here. Each address is its own church.
+            It creates a separate server so both can be live together. The same Google billing account and Soniox account are
+            fine. A new Soniox key is recommended. Open the new link it prints. Each address is its own venue.
           </p>
           <Button variant="secondary" onClick={() => setStep(1)}>
             Back
@@ -220,9 +221,9 @@ function Finished({
           Print the card
         </Button>
 
-        <h3 className="font-semibold pt-3">Other churches</h3>
+        <h3 className="font-semibold pt-3">Other venues</h3>
         <p>
-          Share this so another church can set up the same captions. On that page, "Set up another church" keeps this one
+          Share this so another venue can set up the same captions. On that page, "Set up another venue" keeps this one
           separate, including on the same Google account and in this browser.
         </p>
         <div className="flex flex-wrap gap-3">
@@ -390,13 +391,14 @@ function Delete({ status }: { status: Status | null | undefined }) {
       <Button variant="secondary" onClick={() => window.open(NEWKEY_URL, "_blank", "noopener")}>
         Rotate Soniox key
       </Button>
-      <h3 className="font-semibold pt-3">Set up another church</h3>
+      <h3 className="font-semibold pt-3">Set up another venue</h3>
       <p>
-        Creates a separate captions server on this Google account. This church's link and QR code stay the same. Open the
-        new link it prints, in this browser or any other.
+        Creates a separate server so two sessions can run at the same time. This venue's link and QR code stay the same.
+        The same Google billing account and Soniox account are fine. A new Soniox key is recommended. Open the new link it
+        prints, in this browser or any other.
       </p>
       <Button variant="secondary" onClick={() => window.open(ANOTHER_URL, "_blank", "noopener")}>
-        Set up another church
+        Set up another venue
       </Button>
       <h3 className="font-semibold pt-3">Delete</h3>
       <p>

@@ -4,7 +4,7 @@
 # "Install on Google Cloud" button.
 #
 #   ./deploy.sh                 install, or re-check an existing install
-#   ./deploy.sh --new-project   another church on this same Google account
+#   ./deploy.sh --new-project   another venue on this same Google account
 #   ./deploy.sh --new-key       replace the Soniox key
 #   ./deploy.sh --rotate-token  issue a new sound desk link (the old one stops working)
 #   ./deploy.sh --reselect      support use: pick the Cloud Run region again
@@ -127,7 +127,7 @@ else
       note "Type the number of the one you want."
       read -rp "   Number: " CHOICE
     else
-      note "Type the number of the one you want, or type new for another church."
+      note "Type the number of the one you want, or type new for another venue."
       read -rp "   Choice: " CHOICE
     fi
     if [ "$CHOICE" = new ] && ! $ROTATE && ! $NEW_KEY; then
