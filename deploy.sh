@@ -29,6 +29,7 @@ done
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 LOG="$HOME/captioning-install.log"
 printf '=== %s install started\n' "$(date -u +%FT%TZ)" >"$LOG"
+WORK="$(mktemp -d)"
 
 # A spinner with a seconds counter, so quiet steps never look frozen. Any output stops it.
 SPIN_PID=""
@@ -52,7 +53,17 @@ spin_stop() {
   SPIN_PID=""
   printf '\r\033[K'
 }
-trap spin_stop EXIT
+
+BG_PID=""
+cleanup() {
+  spin_stop
+  if [ -n "$BG_PID" ] && kill -0 "$BG_PID" 2>/dev/null; then
+    pkill -P "$BG_PID" 2>/dev/null || true
+    kill "$BG_PID" 2>/dev/null || true
+  fi
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
 
 bold() { spin_stop; printf '\n\033[1m%s\033[0m\n' "$*"; }
 note() { spin_stop; printf '   %s\n' "$*"; }
@@ -110,54 +121,108 @@ if [ -z "$BILLING" ]; then
 fi
 note "Billing: connected"
 
-# --------------------------------------------------------------------------- services
-STEP="turning on Google Cloud services"
-spin "Turning on Google Cloud services (a few minutes the first time)"
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
-  translate.googleapis.com billingbudgets.googleapis.com cloudresourcemanager.googleapis.com --quiet >/dev/null 2>>"$LOG" ||
-  fail "Couldn't turn on the Google Cloud services."
-note "Services: on"
-
-# --------------------------------------------------------------------------- region
-STEP="choosing the closest region"
+# --------------------------------------------------------------------------- existing install
+# Fails fast (no prompts) when Cloud Run isn't turned on yet, which means there's no install.
+STEP="checking for an existing install"
 spin "Checking for an existing install"
-REGION="${REGION:-}"
-EXISTING_REGION="$(timeout 120 gcloud run services list --filter="metadata.name=${SERVICE}" --format='value(region)' --limit=1 2>>"$LOG" || true)"
-if [ -z "$REGION" ] && [ -n "$EXISTING_REGION" ] && ! $RESELECT; then REGION="$EXISTING_REGION"; fi
-if [ -z "$REGION" ]; then
-  spin "Choosing the closest region"
-  RUN_REGIONS="$(timeout 120 gcloud run regions list --format='value(locationId)' 2>>"$LOG" || true)"
-  # Cloud Shell is placed in the Google Cloud region closest to the person using it.
-  ZONE="$(curl -sf -m 3 -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/zone 2>>"$LOG" || true)"
-  CANDIDATE="${ZONE##*/}"
-  CANDIDATE="${CANDIDATE%-*}"
-  printf 'cloud shell zone=%s regions=%s\n' "$ZONE" "$(wc -w <<<"$RUN_REGIONS")" >>"$LOG"
-  if [ -n "$CANDIDATE" ] && { [ -z "$RUN_REGIONS" ] || grep -qx "$CANDIDATE" <<<"$RUN_REGIONS"; }; then
-    REGION="$CANDIDATE"
-  else
-    spin "Measuring which region is fastest from here"
-    BEST_MS=999999
-    for r in $RUN_REGIONS; do
-      t="$(curl -s -o /dev/null -m 3 -w '%{time_connect}' "https://${r}-run.googleapis.com/" 2>>"$LOG" || echo 9)"
-      ms="$(awk -v t="$t" 'BEGIN { printf "%d", t * 1000 }')"
-      if [ "$ms" -gt 0 ] && [ "$ms" -lt "$BEST_MS" ]; then BEST_MS="$ms" REGION="$r"; fi
-    done
-  fi
-fi
-[ -n "$REGION" ] || fail "Couldn't work out the closest region." "Ask your helper to run: REGION=<region> ./deploy.sh"
-note "Region: ${REGION}"
-
-# --------------------------------------------------------------------------- existing settings
-STEP="reading the current settings"
+EXISTING_REGION="$(timeout 60 gcloud run services list --filter="metadata.name=${SERVICE}" --format='value(region)' --limit=1 2>>"$LOG" || true)"
 CURRENT_ENV="{}"
 if [ -n "$EXISTING_REGION" ]; then
-  spin "Reading the current settings"
-  CURRENT_ENV="$(gcloud run services describe "$SERVICE" --region="$EXISTING_REGION" --format=json 2>>"$LOG" |
+  CURRENT_ENV="$(timeout 60 gcloud run services describe "$SERVICE" --region="$EXISTING_REGION" --format=json 2>>"$LOG" |
     python3 -c 'import json,sys; s=json.load(sys.stdin); c=s["spec"]["template"]["spec"]["containers"][0]; print(json.dumps({e["name"]: e.get("value","") for e in c.get("env",[])}))' 2>>"$LOG" || echo '{}')"
 fi
 env_value() { python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get(sys.argv[2], ""))' "$CURRENT_ENV" "$1"; }
 KEY="$(env_value SONIOX_API_KEY)"
 TOKEN="$(env_value SPEAKER_TOKEN)"
+if [ -z "$TOKEN" ] || $ROTATE; then TOKEN="$(openssl rand -hex 16)"; fi
+REGION="${REGION:-}"
+if [ -z "$REGION" ] && [ -n "$EXISTING_REGION" ] && ! $RESELECT; then REGION="$EXISTING_REGION"; fi
+
+# --------------------------------------------------------------------------- Google Cloud, in the background
+# Everything here is slow but needs nothing from the person, so it runs while they get a Soniox key.
+# Progress goes to the log; the current step is in $WORK/step and any failure in $WORK/failed.
+background() {
+  set +e
+  step() { printf '%s [background] %s\n' "$(date -u +%T)" "$1"; printf '%s' "$1" >"$WORK/step"; }
+  die() { printf '%s' "$1" >"$WORK/failed"; exit 1; }
+
+  step "Turning on Google Cloud services"
+  gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
+    translate.googleapis.com billingbudgets.googleapis.com cloudresourcemanager.googleapis.com --quiet ||
+    die "turning on Google Cloud services"
+
+  if [ -z "$REGION" ]; then
+    step "Choosing the closest region"
+    local run_regions zone candidate best_ms=999999 r t ms
+    run_regions="$(timeout 120 gcloud run regions list --format='value(locationId)')"
+    # Cloud Shell is placed in the Google Cloud region closest to the person using it.
+    zone="$(curl -sf -m 3 -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/zone)"
+    candidate="${zone##*/}"
+    candidate="${candidate%-*}"
+    echo "cloud shell zone=${zone} regions=$(wc -w <<<"$run_regions")"
+    if [ -n "$candidate" ] && { [ -z "$run_regions" ] || grep -qx "$candidate" <<<"$run_regions"; }; then
+      REGION="$candidate"
+    else
+      for r in $run_regions; do
+        t="$(curl -s -o /dev/null -m 3 -w '%{time_connect}' "https://${r}-run.googleapis.com/" || echo 9)"
+        ms="$(awk -v t="$t" 'BEGIN { printf "%d", t * 1000 }')"
+        if [ "$ms" -gt 0 ] && [ "$ms" -lt "$best_ms" ]; then best_ms="$ms" REGION="$r"; fi
+      done
+    fi
+    [ -n "$REGION" ] || die "choosing the closest region"
+  fi
+  printf '%s' "$REGION" >"$WORK/region"
+
+  step "Setting up permissions"
+  local run_sa="captioning-run@${PROJECT}.iam.gserviceaccount.com"
+  local build_sa="captioning-build@${PROJECT}.iam.gserviceaccount.com"
+  gcloud iam service-accounts describe "$run_sa" >/dev/null ||
+    gcloud iam service-accounts create captioning-run --display-name="Captioning server" --quiet ||
+    die "setting up permissions"
+  gcloud iam service-accounts describe "$build_sa" >/dev/null ||
+    gcloud iam service-accounts create captioning-build --display-name="Captioning build" --quiet ||
+    die "setting up permissions"
+  grant() {
+    local tries=0
+    until gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$1" --role="$2" --condition=None --quiet >/dev/null; do
+      tries=$((tries + 1))
+      [ "$tries" -lt 6 ] || return 1
+      sleep 5 # new service accounts take a few seconds to appear
+    done
+  }
+  grant "$run_sa" roles/cloudtranslate.user || die "setting up permissions"
+  grant "$build_sa" roles/run.builder || die "setting up permissions"
+
+  step "Checking the budget alert"
+  if [ -z "$(gcloud billing budgets list --billing-account="$BILLING" --filter="displayName='Live captions alert'" --format='value(name)')" ]; then
+    local currency
+    currency="$(gcloud billing accounts describe "$BILLING" --format='value(currencyCode)' || echo GBP)"
+    if gcloud billing budgets create --billing-account="$BILLING" --display-name="Live captions alert" \
+      --budget-amount="5${currency}" --filter-projects="projects/${PROJECT}" \
+      --threshold-rule=percent=0.5 --threshold-rule=percent=1.0 >/dev/null; then
+      printf "Budget alert: you'll get an email if spending passes 5 %s a month" "$currency" >"$WORK/budget"
+    else
+      printf "Budget alert: skipped (this account can't create budgets; that's fine)" >"$WORK/budget"
+    fi
+  fi
+
+  # The Soniox key is added afterwards (a quick settings change), so the build doesn't wait for it.
+  step "Building the captioning server (about 3 minutes)"
+  gcloud run deploy "$SERVICE" \
+    --source backend \
+    --region "$REGION" \
+    --allow-unauthenticated \
+    --max-instances=1 --min-instances=0 \
+    --timeout=3600 --concurrency=1000 \
+    --cpu=1 --memory=512Mi \
+    --service-account="$run_sa" \
+    --build-service-account="projects/${PROJECT}/serviceAccounts/${build_sa}" \
+    --update-env-vars="SPEAKER_TOKEN=${TOKEN}" \
+    --quiet ||
+    die "building the captioning server"
+}
+background >>"$LOG" 2>&1 &
+BG_PID=$!
 
 # --------------------------------------------------------------------------- Soniox key
 STEP="checking your Soniox key"
@@ -173,75 +238,79 @@ key_works() {
   done
   return 1
 }
+
+ASK_KEY=false
 if [ -z "$KEY" ] || $NEW_KEY; then
-  bold "Paste your Soniox API key and press Enter"
-  note "(Nothing appears while you paste. That's normal.)"
-  read -rsp "   Soniox key: " KEY
-  echo
-  KEY="$(tr -d '[:space:]' <<<"$KEY")"
-  [ -n "$KEY" ] || fail "No key was pasted."
-fi
-spin "Checking your Soniox key"
-key_works "$KEY" || fail "Soniox didn't accept that key." \
-  "Copy the key again from https://console.soniox.com (API keys), check the account has credit, then run: ./deploy.sh --new-key"
-note "Soniox key: OK"
-
-# --------------------------------------------------------------------------- sound desk link
-if [ -z "$TOKEN" ] || $ROTATE; then TOKEN="$(openssl rand -hex 16)"; fi
-
-# --------------------------------------------------------------------------- service accounts
-STEP="setting up permissions"
-spin "Setting up permissions"
-RUN_SA="captioning-run@${PROJECT}.iam.gserviceaccount.com"
-BUILD_SA="captioning-build@${PROJECT}.iam.gserviceaccount.com"
-gcloud iam service-accounts describe "$RUN_SA" >/dev/null 2>>"$LOG" ||
-  gcloud iam service-accounts create captioning-run --display-name="Captioning server" --quiet >/dev/null
-gcloud iam service-accounts describe "$BUILD_SA" >/dev/null 2>>"$LOG" ||
-  gcloud iam service-accounts create captioning-build --display-name="Captioning build" --quiet >/dev/null
-grant() {
-  local tries=0
-  until gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$1" --role="$2" --condition=None --quiet >/dev/null 2>>"$LOG"; do
-    tries=$((tries + 1))
-    [ "$tries" -lt 6 ] || return 1
-    sleep 5 # new service accounts take a few seconds to appear
-  done
-}
-grant "$RUN_SA" roles/cloudtranslate.user
-grant "$BUILD_SA" roles/run.builder
-
-# --------------------------------------------------------------------------- budget alert
-STEP="creating a budget alert"
-spin "Checking the budget alert"
-if [ -n "$BILLING" ] || BILLING="$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName.basename())' 2>>"$LOG")"; then
-  if [ -z "$(gcloud billing budgets list --billing-account="$BILLING" --filter="displayName='Live captions alert'" --format='value(name)' 2>>"$LOG" || true)" ]; then
-    CURRENCY="$(gcloud billing accounts describe "$BILLING" --format='value(currencyCode)' 2>>"$LOG" || echo GBP)"
-    if gcloud billing budgets create --billing-account="$BILLING" --display-name="Live captions alert" \
-      --budget-amount="5${CURRENCY}" --filter-projects="projects/${PROJECT}" \
-      --threshold-rule=percent=0.5 --threshold-rule=percent=1.0 >/dev/null 2>>"$LOG"; then
-      note "Budget alert: you'll get an email if spending passes 5 ${CURRENCY} a month"
-    else
-      note "Budget alert: skipped (this account can't create budgets; that's fine)"
-    fi
+  ASK_KEY=true
+else
+  spin "Checking your Soniox key"
+  if key_works "$KEY"; then
+    note "Soniox key: OK"
+  else
+    note "Your saved Soniox key no longer works, so you'll need a new one."
+    ASK_KEY=true
   fi
 fi
 
-# --------------------------------------------------------------------------- deploy
-STEP="installing the captioning server"
-spin_stop
-bold "Installing the captioning server (about 3 minutes)..."
-gcloud run deploy "$SERVICE" \
-  --source backend \
-  --region "$REGION" \
-  --allow-unauthenticated \
-  --max-instances=1 --min-instances=0 \
-  --timeout=3600 --concurrency=1000 \
-  --cpu=1 --memory=512Mi \
-  --service-account="$RUN_SA" \
-  --build-service-account="projects/${PROJECT}/serviceAccounts/${BUILD_SA}" \
-  --update-env-vars="^@^SONIOX_API_KEY=${KEY}@SPEAKER_TOKEN=${TOKEN}" \
-  --quiet
+if $ASK_KEY; then
+  bold "Now get a Soniox key. Google Cloud carries on setting up while you do."
+  note "Soniox turns speech into captions and translations."
+  note ""
+  note "1. Open https://console.soniox.com and sign up, or sign in."
+  note "2. Add some credit under Billing (prices: https://soniox.com/pricing)."
+  note "3. Click \"API keys\", then \"Create API key\", and copy it."
+  note "4. Come back here, paste it below and press Enter."
+  TRIES=0
+  while :; do
+    printf '\n'
+    note "(Nothing appears while you paste. That's normal.)"
+    read -rsp "   Soniox key: " KEY
+    printf '\n'
+    KEY="$(tr -d '[:space:]' <<<"$KEY")"
+    if [ -z "$KEY" ]; then
+      note "Nothing was pasted. Paste your key when you have it."
+      continue
+    fi
+    spin "Checking your Soniox key"
+    if key_works "$KEY"; then
+      note "Soniox key: OK"
+      break
+    fi
+    TRIES=$((TRIES + 1))
+    [ "$TRIES" -lt 5 ] || fail "Soniox didn't accept that key." \
+      "Copy the key again from https://console.soniox.com (API keys), check the account has credit, then run: ./deploy.sh --new-key"
+    note "Soniox didn't accept that key. Copy it again from \"API keys\" and check the account has credit, then paste it here."
+  done
+fi
 
-URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
+# --------------------------------------------------------------------------- wait for Google Cloud
+LAST=""
+while kill -0 "$BG_PID" 2>/dev/null; do
+  NOW="$(cat "$WORK/step" 2>/dev/null || true)"
+  if [ -n "$NOW" ] && [ "$NOW" != "$LAST" ]; then spin "$NOW"; LAST="$NOW"; fi
+  sleep 1
+done
+wait "$BG_PID" || true
+BG_PID=""
+spin_stop
+if [ -f "$WORK/failed" ]; then
+  printf '\n'
+  tail -n 15 "$LOG"
+  fail "Something went wrong while $(cat "$WORK/failed")." \
+    "The lines above say why. Copy them to your helper, or simply run the install again."
+fi
+REGION="$(cat "$WORK/region")"
+note "Region: ${REGION}"
+[ -f "$WORK/budget" ] && note "$(cat "$WORK/budget")"
+note "Captioning server: built"
+
+if $ASK_KEY; then
+  STEP="switching on captions with your Soniox key"
+  spin "Switching on captions with your Soniox key"
+  gcloud run services update "$SERVICE" --region "$REGION" --update-env-vars="SONIOX_API_KEY=${KEY}" --quiet >/dev/null 2>>"$LOG"
+fi
+
+URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)' 2>>"$LOG")"
 
 STEP="checking the server answers"
 spin "Checking the server answers"

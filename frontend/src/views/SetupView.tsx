@@ -56,40 +56,15 @@ function Wizard({ onSave }: { onSave: (b: string, t: string) => void }) {
   return (
     <>
       <h1 className="text-3xl font-bold">Set up live captions</h1>
-      <p className="text-lg text-gray-700">Three steps, about 15 minutes, done once.</p>
+      <p className="text-lg text-gray-700">Two steps, about 15 minutes, done once.</p>
       <ol className="flex gap-2" aria-label="Progress">
-        {[1, 2, 3].map((n) => (
+        {[1, 2].map((n) => (
           <li key={n} className={`flex-1 h-2 rounded-full ${n <= step ? "bg-blue-700" : "bg-gray-200"}`} aria-current={n === step} />
         ))}
       </ol>
 
       {step === 1 && (
-        <Card title="Step 1 of 3: Get a Soniox key">
-          <p className="text-lg">Soniox turns speech into captions and translations.</p>
-          <ol className="list-decimal pl-6 space-y-1 text-lg">
-            <li>
-              Sign up at{" "}
-              <a className="underline text-blue-800" href="https://console.soniox.com" target="_blank" rel="noreferrer">
-                console.soniox.com
-              </a>
-              .
-            </li>
-            <li>Add some credit.</li>
-            <li>Click "API keys", then "Create API key", and copy it somewhere safe for step 3.</li>
-          </ol>
-          <p className="text-gray-600">
-            See{" "}
-            <a className="underline" href="https://soniox.com/pricing" target="_blank" rel="noreferrer">
-              Soniox pricing
-            </a>{" "}
-            for what captions cost per hour.
-          </p>
-          <Button onClick={() => setStep(2)}>I have my key</Button>
-        </Card>
-      )}
-
-      {step === 2 && (
-        <Card title="Step 2 of 3: Make sure you have Google Cloud billing">
+        <Card title="Step 1 of 2: Make sure you have Google Cloud billing">
           <p className="text-lg">
             Sign in with the church Google account and add a card. You won't be charged for normal use: the captioning
             server fits in Google's free tier.
@@ -103,20 +78,23 @@ function Wizard({ onSave }: { onSave: (b: string, t: string) => void }) {
             Open Google Cloud billing
           </a>
           <p className="text-gray-600">Already have billing set up? Just carry on.</p>
-          <div className="flex gap-3">
-            <Button variant="secondary" onClick={() => setStep(1)}>
-              Back
-            </Button>
-            <Button onClick={() => setStep(3)}>Billing is set up</Button>
-          </div>
+          <Button onClick={() => setStep(2)}>Billing is set up</Button>
         </Card>
       )}
 
-      {step === 3 && (
-        <Card title='Step 3 of 3: Click "Install on Google Cloud"'>
+      {step === 2 && (
+        <Card title='Step 2 of 2: Click "Install on Google Cloud"'>
           <p className="text-lg">
-            A Google page opens with a panel on the right. Follow its one step: click Run, then paste your Soniox key
-            when asked. Everything else is automatic and takes about 5 minutes.
+            A Google page opens with instructions on the right. Start the install there. While Google Cloud sets up, it
+            walks you through creating a Soniox account (Soniox turns speech into captions and translations) and asks
+            you to paste a key. Everything else is automatic.
+          </p>
+          <p className="text-gray-600">
+            See{" "}
+            <a className="underline" href="https://soniox.com/pricing" target="_blank" rel="noreferrer">
+              Soniox pricing
+            </a>{" "}
+            for what captions cost per hour.
           </p>
           <a
             href={INSTALL_URL}
@@ -149,7 +127,7 @@ function Wizard({ onSave }: { onSave: (b: string, t: string) => void }) {
             </div>
             {pasteError && <p className="text-red-700">That doesn't look like the finish link. Copy the whole line after "Done!".</p>}
           </div>
-          <Button variant="secondary" onClick={() => setStep(2)}>
+          <Button variant="secondary" onClick={() => setStep(1)}>
             Back
           </Button>
         </Card>

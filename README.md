@@ -3,7 +3,7 @@
 Live captions and translation for church services. Each church runs its own tiny
 backend on its own Google Cloud free tier; the web app is hosted on GitHub Pages.
 
-- **Church setup:** open https://tobyfielding1.github.io/self-hosted-captioning/#setup and follow the three steps.
+- **Church setup:** open https://tobyfielding1.github.io/self-hosted-captioning/#setup and follow the two steps.
 - **Sound desk:** open the sound desk link, check the bar moves, press Start.
 - **Congregation:** scan the QR code, pick a language, read.
 
