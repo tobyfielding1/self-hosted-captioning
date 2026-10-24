@@ -25,6 +25,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
+          # Full history so rollbacks can name any commit, including by short SHA.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
