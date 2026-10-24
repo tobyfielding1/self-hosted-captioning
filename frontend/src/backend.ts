@@ -3,15 +3,13 @@ export const SUPPORTED_PROTOCOLS = [1];
 
 const KEYS = { backend: "captioning.backend", token: "captioning.token" } as const;
 
-export type View = "church" | "speak" | "listen";
-
-/** First hash segment is a view name; anything else is treated as parameters. Old `#setup` links still work. */
-const HASH_VIEWS = new Set(["setup", "speak", "listen"]);
+/** Old links used `#setup`, `#speak` or `#listen` as the first hash segment. */
+const LEGACY_VIEWS = new Set(["setup", "speak", "listen"]);
 
 function linkParams(url = location.href): URLSearchParams {
   const parsed = new URL(url, location.origin);
   const segs = parsed.hash.replace(/^#/, "").split("&").filter((s) => s.length > 0);
-  const rest = HASH_VIEWS.has(segs[0] ?? "") ? segs.slice(1) : segs;
+  const rest = LEGACY_VIEWS.has(segs[0] ?? "") ? segs.slice(1) : segs;
   const params = new URLSearchParams(rest.join("&"));
   const fromQuery = parsed.searchParams.get("backend");
   if (fromQuery && !params.has("backend")) params.set("backend", fromQuery);
@@ -41,21 +39,19 @@ export interface Languages {
   targets: { code: string; via: "soniox" | "google"; name?: string }[];
 }
 
-export function currentView(): View {
-  const view = location.hash.replace(/^#/, "").split("&")[0];
-  if (view === "listen") return "listen";
-  if (view === "speak") return "speak";
-  return new URLSearchParams(location.search).has("backend") ? "listen" : "church";
+/** Congregation links carry `?backend=` and no token. The token is the sound desk. */
+export function isCongregation(): boolean {
+  return new URLSearchParams(location.search).has("backend") && !linkParams().get("token");
 }
 
 const clean = (url: string) => url.trim().replace(/\/+$/, "");
 
-/** True when this page load came from an install finish link (not a sound desk `#speak` link). */
+/** True when this device just received a sound desk token it did not already have. */
 let shareAfterLink = false;
 export const shouldOpenShare = () => shareAfterLink;
 
 /**
- * Picks up `?backend=` (listener links) and `#backend=&token=` (sound desk and finish links),
+ * Picks up `?backend=` (congregation) and `#backend=&token=` (sound desk),
  * remembers them, and removes the token from the address bar.
  */
 export function initFromUrl() {
@@ -64,14 +60,14 @@ export function initFromUrl() {
   if (backend) localStorage.setItem(KEYS.backend, clean(backend));
   const token = params.get("token");
   if (token) {
-    localStorage.setItem(KEYS.token, token.trim());
-    const view = location.hash.replace(/^#/, "").split("&")[0];
-    shareAfterLink = view !== "speak";
-    history.replaceState(null, "", `${location.pathname}${location.search}${view === "speak" ? "#speak" : view === "listen" ? "#listen" : ""}`);
+    const next = token.trim();
+    shareAfterLink = localStorage.getItem(KEYS.token) !== next;
+    localStorage.setItem(KEYS.token, next);
   }
+  if (location.hash) history.replaceState(null, "", `${location.pathname}${location.search}`);
 }
 
-/** Sound desk / finish links: `#backend=&token=` or the older `#setup&backend=&token=` / `#speak&...`. */
+/** Sound desk / finish links: `#backend=&token=`. Older `#setup` / `#speak` links still parse. */
 export function deskLinkParts(url: string): { backend: string; token: string } | null {
   try {
     const params = linkParams(url.trim());
@@ -103,11 +99,11 @@ export function wsUrl(path: string, params: Record<string, string>): string {
 const appBase = () => `${location.origin}${location.pathname}`;
 
 export function listenerLink(backend = getBackend()): string {
-  return `${appBase()}?backend=${encodeURIComponent(backend ?? "")}#listen`;
+  return `${appBase()}?backend=${encodeURIComponent(backend ?? "")}`;
 }
 
 export function speakLink(backend = getBackend(), token = getToken()): string {
-  return `${appBase()}#speak&backend=${encodeURIComponent(backend ?? "")}&token=${encodeURIComponent(token ?? "")}`;
+  return `${appBase()}#backend=${encodeURIComponent(backend ?? "")}&token=${encodeURIComponent(token ?? "")}`;
 }
 
 export async function getStatus(backend = getBackend()): Promise<Status | null> {

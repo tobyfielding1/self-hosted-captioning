@@ -1,23 +1,27 @@
 import { useEffect, useState } from "react";
-import { currentView, shouldOpenShare, type View } from "./backend";
+import { isCongregation, shouldOpenShare } from "./backend";
 import ChurchView from "./views/ChurchView";
 import ListenView from "./views/ListenView";
 
 export default function App() {
-  const [view, setView] = useState<View>(currentView);
+  const [listen, setListen] = useState(isCongregation);
 
   useEffect(() => {
-    const onHash = () => setView(currentView());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    const onNav = () => setListen(isCongregation());
+    window.addEventListener("hashchange", onNav);
+    window.addEventListener("popstate", onNav);
+    return () => {
+      window.removeEventListener("hashchange", onNav);
+      window.removeEventListener("popstate", onNav);
+    };
   }, []);
 
   useEffect(() => {
-    document.title = view === "listen" ? "Live captions" : "Captions";
-    if (view !== "listen") document.documentElement.classList.remove("dark");
-  }, [view]);
+    document.title = listen ? "Live captions" : "Captions";
+    if (!listen) document.documentElement.classList.remove("dark");
+  }, [listen]);
 
-  if (view === "listen") return <ListenView />;
+  if (listen) return <ListenView />;
 
   return (
     <div className="min-h-full bg-gray-100 text-gray-900 print:bg-white">
