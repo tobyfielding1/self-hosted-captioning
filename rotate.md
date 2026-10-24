@@ -1,6 +1,6 @@
 # New sound desk link
 
-Use this if the sound desk link was shared with someone who shouldn't have it. It issues a new link and the old one stops working. The QR code and congregation link do not change.
+Use this if the sound desk link was shared with someone who shouldn't have it. It issues a new link and the old one stops working. The QR code and audience link do not change.
 
 ## Start
 

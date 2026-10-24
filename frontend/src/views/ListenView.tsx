@@ -7,7 +7,7 @@ type Phase = "checking" | "waiting" | "live" | "reconnecting" | "ended" | "gave-
 
 const STORE = { lang: "captioning.lang", size: "captioning.size", dark: "captioning.dark" };
 
-/** A congregation link names its language only with `?backend=…&lang=fr`. Without `lang`, the picker is shown. */
+/** An audience link names its language only with `?backend=…&lang=fr`. Without `lang`, the picker is shown. */
 function langFromUrl(): string | null {
   return new URLSearchParams(location.search).get("lang");
 }

@@ -58,19 +58,19 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
   }, [allowed, status?.venue]);
 
   return (
-    <main className="max-w-2xl mx-auto p-4 space-y-4 print:p-0 print:max-w-none">
+    <main className="max-w-2xl mx-auto p-4 space-y-4">
       {backend && token && !allowed ? (
         <DeskGate access={access === "bad" || access === "down" ? access : "checking"} />
       ) : allowed ? (
         <>
-          {status?.venue && <h1 className="text-3xl font-bold print:hidden">{status.venue}</h1>}
+          {status?.venue && <h1 className="text-3xl font-bold">{status.venue}</h1>}
           <Notices status={status} />
           <SpeakView
             settings={<Delete status={status} />}
             extras={(panels) => (
               <>
                 <Finished backend={backend!} token={token!} open={shareOpen} status={status} />
-                <div className="space-y-4 print:hidden">{panels}</div>
+                <div className="space-y-4">{panels}</div>
               </>
             )}
           />
@@ -275,9 +275,9 @@ function Finished({
   };
 
   const emailBody = [
-    "Here's the link for running live captions from the sound desk.",
+    "Here's the sound desk link. Opening it is the sound desk page.",
     "",
-    "Bookmark it as \"Captions\". Opening that bookmark is the sound desk:",
+    "Bookmark it as \"Captions\":",
     speak,
     "",
     "Every service: open the bookmark, check the bar moves when someone speaks, press Start. Press Stop at the end.",
@@ -288,10 +288,11 @@ function Finished({
 
   return (
     <>
-      <div className="space-y-4 print:hidden">
+      <div className="space-y-4">
       <Details summary="Share" open={open}>
         <h3 className="font-semibold">Sound desk link</h3>
-        <p>Bookmark this page as "Captions". The address is the sound desk link, so keep it private.</p>
+        <p>This page is the sound desk link. Bookmark it as "Captions" and keep it private.</p>
+        <p className="text-sm break-all text-gray-600">{speak}</p>
         <div className="flex flex-wrap gap-3">
           <Button onClick={() => copy("speak", speak)}>{copied === "speak" ? "Copied" : "Copy link"}</Button>
           <a href={mailto} className="bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50">
@@ -299,30 +300,22 @@ function Finished({
           </a>
         </div>
 
-        <h3 className="font-semibold pt-3">QR code for the congregation</h3>
+        <h3 className="font-semibold pt-3">QR code for the audience</h3>
         <p>People scan this with their phone camera to follow along. It never changes, even after updates.</p>
         <canvas ref={canvas} className="rounded-lg border border-gray-200" />
         <div className="flex flex-wrap gap-3">
           <Button onClick={downloadQr}>Download QR code (PNG)</Button>
           <Button variant="secondary" onClick={() => copy("listen", listen)}>
-            {copied === "listen" ? "Copied" : "Copy listener link"}
+            {copied === "listen" ? "Copied" : "Copy audience link"}
           </Button>
         </div>
         <a className="inline-block underline text-blue-800" href={listen} target="_blank" rel="noreferrer">
-          Open the congregation view
+          Open the audience view
         </a>
-
-        <h3 className="font-semibold pt-3">Sunday checklist</h3>
-        <p>A one-page card for the sound desk.</p>
-        <Button variant="secondary" onClick={() => window.print()}>
-          Print the card
-        </Button>
       </Details>
 
       <Spending status={status} />
       </div>
-
-      <SundayCard />
     </>
   );
 }
@@ -336,7 +329,7 @@ function Notices({ status }: { status: Status | null | undefined }) {
   const faster = !!status?.sonioxFasterRegion && !tipDismissed;
   if (!down && !error && !needsReinstall && !faster) return null;
   return (
-    <div className="space-y-3 print:hidden">
+    <div className="space-y-3">
       {down && (
         <Banner tone="warn">The captioning server isn't answering yet. If you've only just installed it, wait a minute and reload.</Banner>
       )}
@@ -514,31 +507,6 @@ function Delete({ status }: { status: Status | null | undefined }) {
           {status?.billingAccount ? " (Account management → Close billing account)." : " (pick the captions account, then Account management → Close billing account)."}{" "}
           Only close it if you created it for captions and nothing else uses it.
         </li>
-      </ul>
-    </div>
-  );
-}
-
-function SundayCard() {
-  return (
-    <div className="hidden print:block text-black">
-      <h1 className="text-4xl font-bold mb-6">How to run captions</h1>
-      <ol className="list-decimal pl-8 space-y-4 text-2xl">
-        <li>Open the "Captions" bookmark.</li>
-        <li>Check the bar moves when someone speaks ("We can hear you").</li>
-        <li>
-          Press the big <strong>Start</strong> button.
-        </li>
-      </ol>
-      <p className="text-2xl mt-6">
-        At the end of the service, press <strong>Stop</strong>.
-      </p>
-      <h2 className="text-2xl font-bold mt-10 mb-3">Good to know</h2>
-      <ul className="list-disc pl-8 space-y-2 text-xl">
-        <li>Keep the tab open during the service.</li>
-        <li>"Pause captions" hides parts of the service you don't want captioned, such as notices.</li>
-        <li>"Test captions" shows words on screen for a minute, to check it's working before the service.</li>
-        <li>Problems? Press Help on the page. "Still stuck" has a button that copies details for your helper.</li>
       </ul>
     </div>
   );

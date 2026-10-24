@@ -6,14 +6,14 @@ backend on its own Google Cloud free tier; the web app is hosted on GitHub Pages
 - **Intro:** https://tobyfielding1.github.io/self-hosted-captioning/ explains it. Share this with another venue.
 - **Setup:** https://tobyfielding1.github.io/self-hosted-captioning/setup/ is the install. A second venue starts here.
 - **Sound desk:** open the sound desk link, check the bar moves, press Start.
-- **Congregation:** scan the QR code, pick a language, read.
+- **Audience:** scan the QR code, pick a language, read.
 
 ## How it works
 
 ```
 Sound desk browser --(16 kHz PCM, silence removed)--> Venue Cloud Run --(one stream per language in use)--> Soniox
                                                              |
-Congregation phones <------------(caption text)--------------+--(final sentences, languages Soniox lacks)--> Google Translate
+Audience phones <------------(caption text)--------------+--(final sentences, languages Soniox lacks)--> Google Translate
 ```
 
 - Soniox connections open only while the sound desk is live **and** someone is reading that language.

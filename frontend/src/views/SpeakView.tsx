@@ -47,7 +47,6 @@ export default function SpeakView({
     return v ? Number(v) : null;
   });
   const [conn, setConn] = useState<ConnState>("off");
-  const [paused, setPaused] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [errors, setErrors] = useState<{ at: string; message: string }[]>([]);
@@ -63,7 +62,6 @@ export default function SpeakView({
   const lastHeardRef = useRef(0);
   const calibrateAtRef = useRef<number | null>(null);
   const connRef = useRef<SpeakerConnection | null>(null);
-  const pausedRef = useRef(false);
 
   const live = conn !== "off";
   const wakeLock = useWakeLock(live);
@@ -92,10 +90,7 @@ export default function SpeakView({
       setConn,
       (msg: ServerMessage) => {
         if (msg.type === "hello") setHello(msg);
-        else if (msg.type === "stats") {
-          setStats(msg);
-          setPaused(msg.paused);
-        } else if (msg.type === "preview") setPreview(msg);
+        else if (msg.type === "stats") setStats(msg); else if (msg.type === "preview") setPreview(msg);
         else if (msg.type === "error") {
           setErrors((e) => [...e.slice(-19), { at: new Date().toISOString(), message: msg.message }]);
           setShownError(msg.message);
@@ -126,7 +121,7 @@ export default function SpeakView({
     }
     if (rms >= gate.threshold) lastHeardRef.current = performance.now();
     const connection = connRef.current!;
-    if (connection.state !== "live" || pausedRef.current) return;
+    if (connection.state !== "live") return;
     for (const frame of gate.push(pcm, rms)) connection.sendAudio(frame);
   }, []);
 
@@ -230,17 +225,8 @@ export default function SpeakView({
 
   const stop = () => {
     connRef.current!.stop();
-    setPaused(false);
-    pausedRef.current = false;
     setStats(null);
     setPreview(null);
-  };
-
-  const togglePause = () => {
-    const next = !paused;
-    setPaused(next);
-    pausedRef.current = next;
-    connRef.current!.setPaused(next);
   };
 
   const setManual = (v: number | null) => {
@@ -300,7 +286,7 @@ export default function SpeakView({
   let headline = "Not live";
   if (conn === "connecting") headline = "Connecting...";
   else if (conn === "reconnecting") headline = "Reconnecting...";
-  else if (conn === "live") headline = paused ? "Paused" : `Live: ${listenersText || "connecting"}`;
+  else if (conn === "live") headline = `Live: ${listenersText || "connecting"}`;
 
   const desk = (
     <Page>
@@ -384,7 +370,7 @@ export default function SpeakView({
         <p className="text-3xl font-bold" aria-live="polite">
           {headline}
         </p>
-        {live && conn === "live" && !paused && stats?.testing && <p className="text-blue-800">Test captions running for a minute.</p>}
+        {live && conn === "live" && stats?.testing && <p className="text-blue-800">Test captions running for a minute.</p>}
 
         {!live && status?.streaming && (
           <Banner tone="warn">
@@ -407,9 +393,6 @@ export default function SpeakView({
               <Button big variant="danger" onClick={stop}>
                 Stop
               </Button>
-              <Button big variant="secondary" onClick={togglePause}>
-                {paused ? "Resume captions" : "Pause captions"}
-              </Button>
               <Button variant="secondary" onClick={() => start(true)}>
                 Test captions
               </Button>
@@ -422,7 +405,7 @@ export default function SpeakView({
             Keep this tab open.{" "}
             {wakeLockSupported() ? (wakeLock ? "The screen will stay on." : "") : "Turn off sleep on this device."}{" "}
             <a className="underline text-blue-800" href={listenerLink()} target="_blank" rel="noreferrer">
-              Open the congregation view
+              Open the audience view
             </a>
           </p>
         )}
@@ -526,11 +509,11 @@ export default function SpeakView({
   return (
     <div className="space-y-4">
       {desk}
-      {extras ? extras(panels) : <div className="space-y-4 print:hidden">{panels}</div>}
+      {extras ? extras(panels) : <div className="space-y-4">{panels}</div>}
     </div>
   );
 }
 
 function Page({ children }: { children: React.ReactNode }) {
-  return <div className="space-y-4 print:hidden">{children}</div>;
+  return <div className="space-y-4">{children}</div>;
 }

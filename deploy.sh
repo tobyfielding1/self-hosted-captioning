@@ -247,7 +247,7 @@ if $ROTATE; then
   bold "Done! The old sound desk link no longer works. Open this new one:"
   printf '\n   %s#backend=%s&token=%s\n\n' "$APP_URL" "$URL" "$TOKEN"
   note "Keep that link private. Open it once on each sound desk computer and bookmark it again."
-  note "The QR code and congregation link stay the same."
+  note "The QR code and audience link stay the same."
   exit 0
 fi
 

@@ -32,7 +32,6 @@ export class SpeakerConnection {
   private wanted = false;
   private retry = 0;
   private timer?: ReturnType<typeof setTimeout>;
-  private paused = false;
   private testOnOpen = false;
 
   constructor(
@@ -66,7 +65,6 @@ export class SpeakerConnection {
     ws.onopen = () => {
       this.retry = 0;
       this.setState("live");
-      if (this.paused) this.send({ type: "pause", paused: true });
       if (this.testOnOpen) {
         this.testOnOpen = false;
         this.send({ type: "test" });
@@ -103,14 +101,9 @@ export class SpeakerConnection {
 
   sendAudio(frame: ArrayBuffer) {
     const ws = this.ws;
-    if (!ws || ws.readyState !== WebSocket.OPEN || this.paused) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (ws.bufferedAmount > MAX_BUFFERED) return;
     ws.send(frame);
-  }
-
-  setPaused(paused: boolean) {
-    this.paused = paused;
-    this.send({ type: "pause", paused });
   }
 
   stop() {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getBackend, getToken, isCongregation, isSetupPage, shouldOpenShare } from "./backend";
+import { getBackend, getToken, isAudience, isSetupPage, shouldOpenShare } from "./backend";
 import ChurchView from "./views/ChurchView";
 import ListenView from "./views/ListenView";
 
@@ -16,7 +16,7 @@ export default function App() {
     };
   }, []);
 
-  const listen = href.length > 0 && isCongregation();
+  const listen = href.length > 0 && isAudience();
 
   useEffect(() => {
     const desk = !listen && !!getBackend() && !!getToken();
@@ -27,7 +27,7 @@ export default function App() {
   if (listen) return <ListenView key={location.search} />;
 
   return (
-    <div className="min-h-full bg-gray-100 text-gray-900 print:bg-white">
+    <div className="min-h-full bg-gray-100 text-gray-900">
       <ChurchView key={`${location.pathname}${location.hash}`} shareOpen={shouldOpenShare()} />
     </div>
   );

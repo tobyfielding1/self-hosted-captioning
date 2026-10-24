@@ -46,8 +46,8 @@ export interface Languages {
   targets: { code: string; via: "soniox" | "google"; name?: string }[];
 }
 
-/** Congregation links carry `?backend=` and no token. The token is the sound desk. */
-export function isCongregation(): boolean {
+/** Audience links carry `?backend=` and no token. The token is the sound desk. */
+export function isAudience(): boolean {
   return new URLSearchParams(location.search).has("backend") && !linkParams().get("token");
 }
 
@@ -58,7 +58,7 @@ let shareAfterLink = false;
 export const shouldOpenShare = () => shareAfterLink;
 
 /**
- * The address bar is the access. A congregation link is `?backend=`. A sound desk
+ * The address bar is the access. An audience link is `?backend=`. A sound desk
  * link is `#backend=&token=`. Share opens when this browser has not seen this token before.
  */
 export function initFromUrl() {
