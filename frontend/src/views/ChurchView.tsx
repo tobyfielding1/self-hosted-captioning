@@ -23,7 +23,13 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
   const [backend, setB] = useState(getBackend());
   const [token, setT] = useState(getToken());
   const [justInstalled, setJustInstalled] = useState(false);
+  const [status, setStatus] = useState<Status | null | undefined>(undefined);
   const installed = !!backend && !!token;
+
+  useEffect(() => {
+    if (!backend) return;
+    void getStatus(backend).then(setStatus);
+  }, [backend]);
 
   const save = (b: string, t: string) => {
     setBackend(b);
@@ -37,8 +43,9 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
     <main className="max-w-2xl mx-auto p-4 space-y-4 print:p-0 print:max-w-none">
       {installed ? (
         <>
+          <Notices status={status} />
           <SpeakView />
-          <Finished backend={backend!} token={token!} open={shareOpen || justInstalled} />
+          <Finished backend={backend!} token={token!} open={shareOpen || justInstalled} status={status} />
         </>
       ) : (
         <Wizard onSave={save} />
@@ -155,18 +162,22 @@ function Wizard({ onSave }: { onSave: (b: string, t: string) => void }) {
 
 // -------------------------------------------------------------------------- finished
 
-function Finished({ backend, token, open }: { backend: string; token: string; open: boolean }) {
-  const [status, setStatus] = useState<Status | null | undefined>(undefined);
+function Finished({
+  backend,
+  token,
+  open,
+  status,
+}: {
+  backend: string;
+  token: string;
+  open: boolean;
+  status: Status | null | undefined;
+}) {
   const [copied, setCopied] = useState<string | null>(null);
-  const [tipDismissed, setTipDismissed] = useState(() => localStorage.getItem(TIP_DISMISSED) === "1");
   const canvas = useRef<HTMLCanvasElement>(null);
   const listen = listenerLink(backend);
   const speak = speakLink(backend, token);
   const setup = `${location.origin}${location.pathname}#setup`;
-
-  useEffect(() => {
-    void getStatus(backend).then(setStatus);
-  }, [backend]);
 
   useEffect(() => {
     if (canvas.current) void QRCode.toCanvas(canvas.current, listen, { width: 280, margin: 2, errorCorrectionLevel: "M" });
@@ -198,9 +209,6 @@ function Finished({ backend, token, open }: { backend: string; token: string; op
     "Please keep this link private.",
   ].join("\n");
   const mailto = `mailto:?subject=${encodeURIComponent("Captions: sound desk link")}&body=${encodeURIComponent(emailBody)}`;
-
-  const nodeMajor = status ? Number(status.node.split(".")[0]) : null;
-  const needsReinstall = status && (!protocolSupported(status) || (nodeMajor !== null && nodeMajor < MIN_NODE_MAJOR));
 
   return (
     <>
@@ -244,76 +252,57 @@ function Finished({ backend, token, open }: { backend: string; token: string; op
         </div>
       </Details>
 
-      <Details summary="Set up" open={open || status === null || !!status?.error || !!needsReinstall}>
-        {status === undefined && <Banner>Checking the captioning server...</Banner>}
-        {status === null && (
-          <Banner tone="warn">The captioning server isn't answering yet. If you've only just installed it, wait a minute and reload.</Banner>
-        )}
-        {status && status.error && <Banner tone="error">{status.error}</Banner>}
-        {status && !status.error && <Banner tone="ok">The captioning server is ready.</Banner>}
-        {needsReinstall && (
-          <Banner tone="warn">
-            The captioning server needs a one-time update. Click{" "}
-            <a className="underline" href={INSTALL_URL} target="_blank" rel="noreferrer">
-              Install on Google Cloud
-            </a>{" "}
-            again and click Run. Your links and QR code stay the same.
-          </Banner>
-        )}
-        {status?.sonioxFasterRegion && !tipDismissed && (
-          <Banner
-            tone="info"
-            onClose={() => {
-              localStorage.setItem(TIP_DISMISSED, "1");
-              setTipDismissed(true);
-            }}
-          >
-            <p className="font-semibold">Captions can be faster (optional)</p>
-            <p>
-              Your church is closer to Soniox's {status.sonioxFasterRegion.toUpperCase()} region. At console.soniox.com,
-              request access to that region, create a project in it, and make an API key there. Then click{" "}
-              <a className="underline" href={INSTALL_URL} target="_blank" rel="noreferrer">
-                Install on Google Cloud
-              </a>{" "}
-              and run <code>./deploy.sh --new-key</code>.
-            </p>
-          </Banner>
-        )}
-
-        <div className="pt-2 space-y-3">
-          <p>
-            Delete removes the captioning server and the Google Cloud project the install created
-            {status?.project ? ` (${status.project})` : ""}. Google keeps a deleted project for 30 days if you change
-            your mind.
-          </p>
-          <a
-            href={DELETE_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block bg-red-700 hover:bg-red-800 text-white font-semibold px-4 py-2.5 rounded-xl"
-          >
-            Delete from Google Cloud
-          </a>
-          <p>These stay, because the install did not create them:</p>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>
-              Your Soniox account, remaining credit and autopay.{" "}
-              <ExtLink href={SONIOX_ACCOUNT}>Delete the Soniox account</ExtLink>
-            </li>
-            <li>
-              Your Google billing account and card.{" "}
-              <ExtLink href={GOOGLE_BILLING}>Close the Google billing account</ExtLink> (pick the account, then Account
-              management → Close billing account). Only close it if you created it for captions and nothing else uses it.
-            </li>
-          </ul>
-        </div>
-      </Details>
-
       <Spending status={status} />
       </div>
 
       <SundayCard />
     </>
+  );
+}
+
+function Notices({ status }: { status: Status | null | undefined }) {
+  const [tipDismissed, setTipDismissed] = useState(() => localStorage.getItem(TIP_DISMISSED) === "1");
+  const nodeMajor = status ? Number(status.node.split(".")[0]) : null;
+  const needsReinstall = status && (!protocolSupported(status) || (nodeMajor !== null && nodeMajor < MIN_NODE_MAJOR));
+  const down = status === null;
+  const error = !!status?.error;
+  const faster = !!status?.sonioxFasterRegion && !tipDismissed;
+  if (!down && !error && !needsReinstall && !faster) return null;
+  return (
+    <div className="space-y-3 print:hidden">
+      {down && (
+        <Banner tone="warn">The captioning server isn't answering yet. If you've only just installed it, wait a minute and reload.</Banner>
+      )}
+      {error && <Banner tone="error">{status.error}</Banner>}
+      {needsReinstall && (
+        <Banner tone="warn">
+          The captioning server needs a one-time update. Click{" "}
+          <a className="underline" href={INSTALL_URL} target="_blank" rel="noreferrer">
+            Install on Google Cloud
+          </a>{" "}
+          again and click Run. Your links and QR code stay the same.
+        </Banner>
+      )}
+      {status?.sonioxFasterRegion && !tipDismissed && (
+        <Banner
+          tone="info"
+          onClose={() => {
+            localStorage.setItem(TIP_DISMISSED, "1");
+            setTipDismissed(true);
+          }}
+        >
+          <p className="font-semibold">Captions can be faster (optional)</p>
+          <p>
+            Your church is closer to Soniox's {status.sonioxFasterRegion.toUpperCase()} region. At console.soniox.com,
+            request access to that region, create a project in it, and make an API key there. Then click{" "}
+            <a className="underline" href={INSTALL_URL} target="_blank" rel="noreferrer">
+              Install on Google Cloud
+            </a>{" "}
+            and run <code>./deploy.sh --new-key</code>.
+          </p>
+        </Banner>
+      )}
+    </div>
   );
 }
 
@@ -384,6 +373,33 @@ function Spending({ status }: { status: Status | null | undefined }) {
               : "The Google Cloud links appear once the captioning server reports its project."}
           </p>
         )}
+      </div>
+      <div>
+        <p className="font-semibold">Delete</p>
+        <p>
+          This removes the captioning server and the Google Cloud project the install created
+          {project ? ` (${project})` : ""}. Google keeps a deleted project for 30 days if you change your mind.
+        </p>
+        <a
+          href={DELETE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block bg-red-700 hover:bg-red-800 text-white font-semibold px-4 py-2.5 rounded-xl"
+        >
+          Delete from Google Cloud
+        </a>
+        <p>These stay, because the install did not create them:</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>
+            Your Soniox account, remaining credit and autopay.{" "}
+            <ExtLink href={SONIOX_ACCOUNT}>Delete the Soniox account</ExtLink>
+          </li>
+          <li>
+            Your Google billing account and card.{" "}
+            <ExtLink href={GOOGLE_BILLING}>Close the Google billing account</ExtLink> (pick the account, then Account
+            management → Close billing account). Only close it if you created it for captions and nothing else uses it.
+          </li>
+        </ul>
       </div>
     </Details>
   );
