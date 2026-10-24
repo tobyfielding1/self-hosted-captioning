@@ -93,5 +93,5 @@ note "  • Google billing account — https://console.cloud.google.com/billing"
 note "    (pick the account, then Account management → Close billing account)."
 note "    Only close that if you created it for captions and nothing else uses it."
 note ""
-note "The captions website on your computers still remembers the old links. They stop working."
+note "Bookmarks of the old links stop working."
 printf '\n'

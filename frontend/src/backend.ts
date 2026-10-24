@@ -1,7 +1,8 @@
 export const ORIGINAL = "original";
 export const SUPPORTED_PROTOCOLS = [1];
 
-const KEYS = { backend: "captioning.backend", token: "captioning.token" } as const;
+/** Which sound desk link last opened Share. This does not grant access. */
+const SEEN_TOKEN = "captioning.seenToken";
 
 /** Old links used `#setup`, `#speak` or `#listen` as the first hash segment. */
 const LEGACY_VIEWS = new Set(["setup", "speak", "listen"]);
@@ -53,29 +54,24 @@ let shareAfterLink = false;
 export const shouldOpenShare = () => shareAfterLink;
 
 /**
- * Picks up `?backend=` (congregation) and `#backend=&token=` (sound desk),
- * remembers them, and removes the token from the address bar.
+ * The address bar is the access. A congregation link is `?backend=`. A sound desk
+ * link is `#backend=&token=`. Share opens when this browser has not seen this token before.
  */
 export function initFromUrl() {
-  const params = linkParams();
-  const backend = params.get("backend");
-  if (backend) localStorage.setItem(KEYS.backend, clean(backend));
-  const token = params.get("token");
-  if (token) {
-    const next = token.trim();
-    shareAfterLink = localStorage.getItem(KEYS.token) !== next;
-    localStorage.setItem(KEYS.token, next);
-  }
-  if (location.hash) history.replaceState(null, "", `${location.pathname}${location.search}`);
+  localStorage.removeItem("captioning.backend");
+  localStorage.removeItem("captioning.token");
+  const token = linkParams().get("token")?.trim();
+  if (!token) return;
+  shareAfterLink = localStorage.getItem(SEEN_TOKEN) !== token;
+  localStorage.setItem(SEEN_TOKEN, token);
 }
 
 export function getBackend(): string | null {
-  const fromQuery = new URLSearchParams(location.search).get("backend");
-  return fromQuery ? clean(fromQuery) : localStorage.getItem(KEYS.backend);
+  const backend = linkParams().get("backend");
+  return backend ? clean(backend) : null;
 }
 
-export const getToken = () => localStorage.getItem(KEYS.token);
-export const clearToken = () => localStorage.removeItem(KEYS.token);
+export const getToken = () => linkParams().get("token")?.trim() || null;
 
 export function wsUrl(path: string, params: Record<string, string>): string {
   const base = getBackend()!.replace(/^http/, "ws");

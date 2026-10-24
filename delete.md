@@ -23,4 +23,4 @@ The install never created these, so they stay until you close them yourself:
 - **Soniox** — the captions project and its API key. [Delete the Soniox project](https://console.soniox.com/org/projects/settings). The account and any remaining credit stay.
 - **Google billing** — the billing account and card. [Close the Google billing account](https://console.cloud.google.com/billing) (open the captions account, then **Account management** → **Close billing account**). Only do this if you created that billing account for captions and nothing else uses it.
 
-The captions website on your computers still remembers the old links. They stop working. You can install again later if you want.
+Bookmarks of the old links stop working. You can install again later if you want.

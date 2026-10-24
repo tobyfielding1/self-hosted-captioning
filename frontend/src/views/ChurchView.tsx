@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { clearToken, getBackend, getStatus, getToken, listenerLink, protocolSupported, speakLink, type Status } from "../backend";
+import { getBackend, getStatus, getToken, listenerLink, protocolSupported, speakLink, type Status } from "../backend";
 import { Banner, Button, Card, copyText, Details } from "../ui";
 import SpeakView from "./SpeakView";
 
@@ -20,10 +20,10 @@ const SONIOX_KEYS = "https://console.soniox.com/org/projects/api/keys";
 const MIN_NODE_MAJOR = 24;
 const TIP_DISMISSED = "captioning.fasterTipDismissed";
 
-/** The church team's page: the setup wizard until this device has a link, then the sound desk plus sharing. */
+/** The church team's page: the setup wizard until the address is a sound desk link. */
 export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
-  const [backend] = useState(getBackend());
-  const [token] = useState(getToken());
+  const backend = getBackend();
+  const token = getToken();
   const [status, setStatus] = useState<Status | null | undefined>(undefined);
   const installed = !!backend && !!token;
 
@@ -166,7 +166,7 @@ function Finished({
   const emailBody = [
     "Here's the link for running live captions from the sound desk.",
     "",
-    "Open it once on the sound desk computer (it remembers everything after that) and bookmark it as \"Captions\":",
+    "Bookmark it as \"Captions\". Opening that bookmark is the sound desk:",
     speak,
     "",
     "Every service: open the bookmark, check the bar moves when someone speaks, press Start. Press Stop at the end.",
@@ -180,7 +180,7 @@ function Finished({
       <div className="space-y-4 print:hidden">
       <Details summary="Share" open={open}>
         <h3 className="font-semibold">Sound desk link</h3>
-        <p>Open this once on the sound desk computer and bookmark it as "Captions". Keep it private.</p>
+        <p>Bookmark this page as "Captions". The address is the sound desk link, so keep it private.</p>
         <div className="flex flex-wrap gap-3">
           <Button onClick={() => copy("speak", speak)}>{copied === "speak" ? "Copied" : "Copy link"}</Button>
           <a href={mailto} className="bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50">
@@ -353,7 +353,6 @@ function startNewDeskLink() {
   const shell = window.open(ROTATE_URL, "_blank");
   if (!shell) return;
   shell.opener = null;
-  clearToken();
   window.close();
   location.replace(`${location.origin}${location.pathname}`);
 }

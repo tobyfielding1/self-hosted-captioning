@@ -6,6 +6,19 @@ import { useWakeLock } from "../lib/wakeLock";
 type Phase = "checking" | "waiting" | "live" | "reconnecting" | "ended" | "gave-up" | "outdated" | "unsupported";
 
 const STORE = { lang: "captioning.lang", size: "captioning.size", dark: "captioning.dark" };
+
+/** A shared congregation link can name its language: `?backend=…&lang=fr`. */
+function langFromUrl(): string | null {
+  return new URLSearchParams(location.search).get("lang");
+}
+
+function rememberLang(code: string) {
+  localStorage.setItem(STORE.lang, code);
+  const url = new URL(location.href);
+  if (!url.searchParams.get("backend")) return;
+  url.searchParams.set("lang", code);
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
 const SIZES = [20, 24, 28, 34, 40, 48, 56];
 const POLL_MS = 30_000;
 const GIVE_UP_MS = 2 * 60 * 60_000;
@@ -19,7 +32,7 @@ interface CaptionState {
 
 export default function ListenView() {
   const backend = getBackend();
-  const [lang, setLang] = useState(() => localStorage.getItem(STORE.lang));
+  const [lang, setLang] = useState(() => langFromUrl() || localStorage.getItem(STORE.lang));
   const [choosing, setChoosing] = useState(!lang);
   const [languages, setLanguages] = useState<Languages | null>(null);
   const [phase, setPhase] = useState<Phase>("checking");
@@ -179,7 +192,7 @@ export default function ListenView() {
   };
 
   const choose = (code: string) => {
-    localStorage.setItem(STORE.lang, code);
+    rememberLang(code);
     setCaption({ lines: [], current: "", partial: "" });
     setLang(code);
     setChoosing(false);

@@ -273,7 +273,7 @@ export default function SpeakView({
       <Page>
         <Banner tone="warn">
           <p className="font-semibold">This device isn't set up for the sound desk yet.</p>
-          <p>Open the sound desk link your admin sent you, once, on this device.</p>
+          <p>Open the sound desk link in this tab.</p>
         </Banner>
       </Page>
     );

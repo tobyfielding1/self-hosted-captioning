@@ -4,10 +4,10 @@ import ChurchView from "./views/ChurchView";
 import ListenView from "./views/ListenView";
 
 export default function App() {
-  const [listen, setListen] = useState(isCongregation);
+  const [href, setHref] = useState(() => location.href);
 
   useEffect(() => {
-    const onNav = () => setListen(isCongregation());
+    const onNav = () => setHref(location.href);
     window.addEventListener("hashchange", onNav);
     window.addEventListener("popstate", onNav);
     return () => {
@@ -16,16 +16,18 @@ export default function App() {
     };
   }, []);
 
+  const listen = href.length > 0 && isCongregation();
+
   useEffect(() => {
     document.title = listen ? "Live captions" : "Captions";
     if (!listen) document.documentElement.classList.remove("dark");
   }, [listen]);
 
-  if (listen) return <ListenView />;
+  if (listen) return <ListenView key={location.search} />;
 
   return (
     <div className="min-h-full bg-gray-100 text-gray-900 print:bg-white">
-      <ChurchView shareOpen={shouldOpenShare()} />
+      <ChurchView key={location.hash} shareOpen={shouldOpenShare()} />
     </div>
   );
 }
