@@ -1,13 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getBackend, getLanguages, getStatus, ORIGINAL, protocolSupported, setupUrl, wsUrl, type Languages } from "../backend";
-import { label, orderLanguages, baseCode } from "../lib/languages";
+import { label, orderLanguages } from "../lib/languages";
 import { useWakeLock } from "../lib/wakeLock";
 
 type Phase = "checking" | "waiting" | "live" | "reconnecting" | "ended" | "gave-up" | "outdated" | "unsupported";
 
 const STORE = { lang: "captioning.lang", size: "captioning.size", dark: "captioning.dark" };
 
-/** A shared congregation link can name its language: `?backend=…&lang=fr`. */
+/** A congregation link names its language only with `?backend=…&lang=fr`. Without `lang`, the picker is shown. */
 function langFromUrl(): string | null {
   return new URLSearchParams(location.search).get("lang");
 }
@@ -32,8 +32,8 @@ interface CaptionState {
 
 export default function ListenView() {
   const backend = getBackend();
-  const [lang, setLang] = useState(() => langFromUrl() || localStorage.getItem(STORE.lang));
-  const [choosing, setChoosing] = useState(!lang);
+  const [lang, setLang] = useState<string | null>(() => langFromUrl());
+  const [choosing, setChoosing] = useState(() => !langFromUrl());
   const [languages, setLanguages] = useState<Languages | null>(null);
   const [phase, setPhase] = useState<Phase>("checking");
   const [caption, setCaption] = useState<CaptionState>({ lines: [], current: "", partial: "" });
@@ -218,7 +218,7 @@ export default function ListenView() {
       </Shell>
     );
 
-  if (choosing) return <LanguageChooser languages={languages} current={lang} venue={venue} onChoose={choose} onCancel={lang ? () => setChoosing(false) : undefined} dark={dark} />;
+  if (choosing) return <LanguageChooser languages={languages} current={lang ?? localStorage.getItem(STORE.lang)} venue={venue} onChoose={choose} onCancel={lang ? () => setChoosing(false) : undefined} dark={dark} />;
 
   const empty = !caption.lines.length && !caption.current && !caption.partial;
   let message: string | null = null;
@@ -346,21 +346,15 @@ function LanguageChooser({
     () => new Map((languages?.targets ?? []).filter((t) => t.name).map((t) => [t.code, t.name!])),
     [languages],
   );
-  const codes = useMemo(() => {
-    const ordered = orderLanguages(
-      (languages?.targets ?? []).map((t) => t.code),
-      names,
-    );
-    const preferred = (navigator.languages ?? [navigator.language]).map(baseCode);
-    const firstOther = ordered.findIndex((c) => !preferred.includes(baseCode(c)));
-    const split = firstOther === -1 ? ordered.length : firstOther;
-    return [...ordered.slice(0, split), ORIGINAL, ...ordered.slice(split)];
-  }, [languages, names]);
+  const codes = useMemo(
+    () => orderLanguages((languages?.targets ?? []).map((t) => t.code).filter((c) => c !== ORIGINAL), names),
+    [languages, names],
+  );
   const via = useMemo(() => new Map((languages?.targets ?? []).map((t) => [t.code, t.via])), [languages]);
   const q = filter.trim().toLocaleLowerCase();
-  const shown = q
-    ? codes.filter((c) => label(c, names.get(c)).toLocaleLowerCase().includes(q) || c.startsWith(q))
-    : codes;
+  const matches = (code: string) => label(code, names.get(code)).toLocaleLowerCase().includes(q) || code.startsWith(q);
+  const shown = q ? codes.filter(matches) : codes;
+  const showOriginal = !q || "original transcript of the words as spoken".includes(q);
 
   return (
     <Shell dark={dark}>
@@ -382,13 +376,25 @@ function LanguageChooser({
           aria-label="Search languages"
           className="w-full rounded-xl border-2 border-gray-300 dark:border-gray-700 bg-transparent px-4 py-3 text-lg"
         />
+        {showOriginal && (
+          <button
+            onClick={() => onChoose(ORIGINAL)}
+            className={`w-full text-left px-4 py-4 rounded-xl border-2 bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 dark:hover:bg-blue-900 ${
+              current === ORIGINAL ? "border-blue-700" : "border-blue-200 dark:border-blue-800"
+            }`}
+          >
+            <span className="block text-xl">Original</span>
+            <span className="block text-base text-gray-600 dark:text-gray-300">Transcript of the words as spoken</span>
+          </button>
+        )}
         {!languages && <p className="text-gray-500">Loading languages...</p>}
-        {languages && (
+        {languages && !q && (
           <p className="text-sm text-gray-500">
             <ViaTag via="soniox" /> appears word by word, with faster, more natural translation, and costs your venue
             less. <ViaTag via="google" /> appears a sentence at a time. If your language has both, choose Soniox.
           </p>
         )}
+        {shown.length > 0 && <p className="text-sm font-semibold text-gray-500">Languages</p>}
         <ul className="flex-1 overflow-y-auto space-y-2">
           {shown.map((code) => (
             <li key={code}>

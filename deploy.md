@@ -2,7 +2,7 @@
 
 ## Before you start
 
-This puts live captions on the venue Google account. It takes about 15 minutes. You need a card on Google Cloud billing. Later pages walk you through a Soniox account, which turns speech into captions.
+This puts live captions on your Google account. It takes about 15 minutes. You need a card on Google Cloud billing. Later pages walk you through a Soniox account, which turns speech into captions.
 
 Click **Start**. The next page has one command to copy into the terminal.
 

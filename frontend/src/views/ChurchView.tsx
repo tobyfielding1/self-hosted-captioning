@@ -109,18 +109,33 @@ function Intro() {
     <>
       <h1 className="text-3xl font-bold">Live captions</h1>
       <p className="text-lg text-gray-700">
-        Captions and translation for a venue. The sound desk runs them from a laptop. People follow on their phones.
+        People in the room read along on their phones, each in their own language. The sound desk runs it from a laptop.
+        Nothing to install.
       </p>
-      <Card title="Set up once">
-        <p className="text-lg">
-          You do this on the venue Google account. It takes about 15 minutes. Each venue gets its own server, sound desk
-          link, and QR code.
+      <Card title="In the room">
+        <p>
+          Open the sound desk bookmark, check the level bar moves when someone speaks, and press Start. Everyone else
+          scans a QR code with their phone camera, picks a language, and reads.
         </p>
         <p>
-          Soniox turns speech into captions and translations, and charges for the time you are live. See{" "}
+          The spoken language appears word by word. Translations appear as the words are spoken. Languages Soniox
+          doesn't offer come through Google Translate, a sentence at a time. The text can be made larger.
+        </p>
+        <p>Press Stop at the end. Phones can follow only while the sound desk is live.</p>
+      </Card>
+      <Card title="Set up once">
+        <p className="text-lg">
+          About 15 minutes, on your Google account. Each venue gets its own server, a private sound desk link, and a QR
+          code that stays the same.
+        </p>
+        <p>
+          The server fits in Google Cloud's free tier for normal use. Soniox turns speech into captions and
+          translations, and charges for speech that is actually captioned: quiet audio isn't sent, and a language runs
+          only while someone is reading it. See{" "}
           <a className="underline" href="https://soniox.com/pricing" target="_blank" rel="noreferrer">
             Soniox pricing
-          </a>. Hosting the server fits in Google Cloud's free tier for normal use.
+          </a>
+          .
         </p>
         <a
           href={setupUrl()}

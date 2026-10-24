@@ -20,6 +20,8 @@ function linkParams(url = location.href): URLSearchParams {
 export interface Status {
   live: boolean;
   paused: boolean;
+  /** A sound desk is connected right now. Missing on a server that hasn't updated yet. */
+  streaming?: boolean;
   version: string;
   protocol: number;
   node: string;

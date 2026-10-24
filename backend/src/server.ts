@@ -95,7 +95,7 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
       res.writeHead(204).end();
       return;
     }
-    if (path === "/status") return json({ live: hub.live, paused: hub.paused, ...info(), ready: !!catalog.model, error: catalog.error });
+    if (path === "/status") return json({ live: hub.live, paused: hub.paused, streaming: hub.streaming, ...info(), ready: !!catalog.model, error: catalog.error });
     if (path === "/languages") return json(catalog.languages());
     if (path === "/" || path === "/healthz") return json({ ok: true });
     res.writeHead(404).end();

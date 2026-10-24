@@ -68,10 +68,24 @@ export default function SpeakView({
   const live = conn !== "off";
   const wakeLock = useWakeLock(live);
 
-  // Wake the server as soon as the page opens so Start is instant.
+  // Watch whether another sound desk is connected, until this page goes live.
   useEffect(() => {
-    void getStatus().then(setStatus);
-  }, []);
+    if (live) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const run = () => {
+      void getStatus().then((s) => {
+        if (cancelled) return;
+        if (s) setStatus(s);
+        timer = setTimeout(run, 3000);
+      });
+    };
+    run();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [live]);
 
   if (!connRef.current) {
     connRef.current = new SpeakerConnection(
@@ -371,6 +385,12 @@ export default function SpeakView({
           {headline}
         </p>
         {live && conn === "live" && !paused && stats?.testing && <p className="text-blue-800">Test captions running for a minute.</p>}
+
+        {!live && status?.streaming && (
+          <Banner tone="warn">
+            Another sound desk is already live. Starting here takes over, and their page stops.
+          </Banner>
+        )}
 
         <div className="flex flex-wrap gap-3">
           {!live ? (

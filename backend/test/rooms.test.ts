@@ -311,6 +311,19 @@ describe("speaker lifecycle", () => {
     await a.waitFor((m) => m.type === "ended", 300);
   });
 
+  it("reports streaming only while a sound desk is connected", async () => {
+    const status = () => fetch(`http://127.0.0.1:${app.port}/status`).then((r) => r.json());
+    expect((await status()).streaming).toBe(false);
+    const s = await speaker();
+    await s.opened();
+    expect((await status()).streaming).toBe(true);
+    s.ws.terminate();
+    await sleep(50);
+    const after = await status();
+    expect(after.streaming).toBe(false);
+    expect(after.live).toBe(true);
+  });
+
   it("lets a second device take over", async () => {
     const first = await speaker();
     await first.opened();

@@ -65,6 +65,10 @@ function languageName(code: string): string {
 export class Hub {
   live = false;
   paused = false;
+  /** A sound desk websocket is connected. False during the grace period after it drops. */
+  get streaming(): boolean {
+    return this.speaker !== null;
+  }
   readonly errors: { at: string; message: string }[] = [];
 
   private speaker: WebSocket | null = null;

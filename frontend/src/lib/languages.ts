@@ -19,7 +19,7 @@ export const localName = (code: string, fallback?: string) =>
   displayName(code, navigator.language) ?? nativeName(code, fallback);
 
 export function label(code: string, fallback?: string): string {
-  if (code === ORIGINAL) return "Original (as spoken)";
+  if (code === ORIGINAL) return "Original (transcript)";
   const native = nativeName(code, fallback);
   const local = localName(code, fallback);
   return native === local ? native : `${native} - ${local}`;
