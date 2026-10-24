@@ -11,6 +11,7 @@ const REPO = "https://github.com/tobyfielding1/self-hosted-captioning";
 const shellUrl = (tutorial: string) =>
   `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_tutorial=${tutorial}&show=terminal`;
 const INSTALL_URL = shellUrl("deploy.md");
+const ROTATE_URL = shellUrl("rotate.md");
 const DELETE_URL = shellUrl("delete.md");
 const SONIOX_ACCOUNT = "https://console.soniox.com/org/settings";
 const GOOGLE_BILLING = "https://console.cloud.google.com/billing";
@@ -215,6 +216,17 @@ function Finished({
             Email to sound desk team
           </a>
         </div>
+        <p className="text-gray-600">
+          If this link got out, issue a new one. The old link stops working. The QR code stays the same.
+        </p>
+        <a
+          href={ROTATE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block underline text-blue-800"
+        >
+          New sound desk link
+        </a>
 
         <h3 className="font-semibold pt-3">QR code for the congregation</h3>
         <p>People scan this with their phone camera to follow along. It never changes, even after updates.</p>

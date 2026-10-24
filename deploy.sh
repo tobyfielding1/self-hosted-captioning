@@ -138,6 +138,20 @@ if [ -z "$TOKEN" ] || $ROTATE; then TOKEN="$(openssl rand -hex 16)"; fi
 REGION="${REGION:-}"
 if [ -z "$REGION" ] && [ -n "$EXISTING_REGION" ] && ! $RESELECT; then REGION="$EXISTING_REGION"; fi
 
+if $ROTATE; then
+  [ -n "$EXISTING_REGION" ] || fail "There's no captioning server on this Google account." "Install first, or sign in as the church Google account that did."
+  STEP="issuing a new sound desk link"
+  spin "Issuing a new sound desk link"
+  gcloud run services update "$SERVICE" --region "$EXISTING_REGION" --update-env-vars="SPEAKER_TOKEN=${TOKEN}" --quiet >/dev/null 2>>"$LOG" ||
+    fail "Couldn't update the captioning server." "Try this again, or run the install."
+  URL="$(gcloud run services describe "$SERVICE" --region "$EXISTING_REGION" --format='value(status.url)' 2>>"$LOG")"
+  bold "Done! The old sound desk link no longer works. Open this new one:"
+  printf '\n   %s#backend=%s&token=%s\n\n' "$APP_URL" "$URL" "$TOKEN"
+  note "Keep that link private. Open it once on each sound desk computer and bookmark it again."
+  note "The QR code and congregation link stay the same."
+  exit 0
+fi
+
 # --------------------------------------------------------------------------- Google Cloud, in the background
 # Everything here is slow but needs nothing from the person, so it runs while they get a Soniox key.
 # Progress goes to the log; the current step is in $WORK/step and any failure in $WORK/failed.
