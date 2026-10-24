@@ -2,7 +2,7 @@
 
 ## Before you start
 
-This puts live captions on the church Google account. It takes about 15 minutes. You need a card on Google Cloud billing. Later pages walk you through a Soniox account, which turns speech into captions.
+This puts live captions on the venue Google account. It takes about 15 minutes. You need a card on Google Cloud billing. Later pages walk you through a Soniox account, which turns speech into captions.
 
 Click **Start**. The next page has one command to copy into the terminal.
 
@@ -14,7 +14,9 @@ Click the **copy** button on the box below (it pastes into the terminal at the b
 ./deploy.sh
 ```
 
-Google Cloud now sets itself up, which takes a few minutes. You don't need to wait: click **Next** and get your Soniox key while it works.
+The terminal asks what to call this venue. Press Enter to keep the name Live captions.
+
+Google Cloud then sets itself up, which takes a few minutes. You don't need to wait: click **Next** and get your Soniox key while it works.
 
 If this Google account already has more than one venue, the terminal lists them by name and asks which one you mean.
 

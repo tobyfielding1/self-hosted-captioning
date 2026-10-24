@@ -204,6 +204,15 @@ describe("cost guard", () => {
     expect(await s.closed()).toBe(4401);
   });
 
+  it("rejects a sound desk check with the wrong token", async () => {
+    const bad = await fetch(`http://127.0.0.1:${app.port}/speaker-check`, { headers: { Authorization: "Bearer wrong" } });
+    expect(bad.status).toBe(401);
+    const missing = await fetch(`http://127.0.0.1:${app.port}/speaker-check`);
+    expect(missing.status).toBe(401);
+    const good = await fetch(`http://127.0.0.1:${app.port}/speaker-check`, { headers: { Authorization: "Bearer secret" } });
+    expect(good.status).toBe(204);
+  });
+
   it("sends no audio to Soniox while nobody is listening", async () => {
     const s = await speaker();
     await s.opened();

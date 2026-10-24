@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs (or updates the settings of) a church's captioning backend on Google Cloud Run.
+# Installs (or updates the settings of) a venue's captioning backend on Google Cloud Run.
 # Safe to run again at any time. Normally run from Cloud Shell via the captions website's
 # "Install on Google Cloud" button.
 #
@@ -88,7 +88,7 @@ trap 'fail "Something went wrong while ${STEP}." "Copy the text above and send i
 STEP="finding your Google Cloud project"
 bold "Setting up live captions"
 ACCOUNT="$(gcloud config get-value account 2>>"$LOG" || true)"
-[ -n "$ACCOUNT" ] || fail "You're not signed in to Google Cloud." "Open this page from the church Google account: https://shell.cloud.google.com"
+[ -n "$ACCOUNT" ] || fail "You're not signed in to Google Cloud." "Open this page from the venue Google account: https://shell.cloud.google.com"
 
 # Google Cloud project names are 4–30 characters: letters, numbers, spaces, hyphens, apostrophes, exclamation marks.
 ask_venue_name() {
@@ -108,20 +108,17 @@ ask_venue_name() {
   done
 }
 create_project() {
-  local display="Live captions"
-  if [ "${1:-}" = ask ]; then
-    if [ "${#NAMES[@]}" -gt 0 ]; then
-      note "This account already has:"
-      local existing
-      for existing in "${NAMES[@]}"; do note "  • ${existing}"; done
-    fi
-    ask_venue_name
-    display="$VENUE_NAME"
+  if [ "${#NAMES[@]}" -gt 0 ]; then
+    note "This account already has:"
+    local existing
+    for existing in "${NAMES[@]}"; do note "  • ${existing}"; done
   fi
+  ask_venue_name
+  local display="$VENUE_NAME"
   DISPLAY="$display"
   PROJECT="captioning-$(openssl rand -hex 3)"
   STEP="creating a Google Cloud project"
-  note "Creating ${display}..."
+  spin "Creating ${display}"
   gcloud projects create "$PROJECT" --name="$display" --labels="$LABEL" --quiet >/dev/null 2>>"$LOG" ||
     fail "Google wouldn't let this account create a new project." \
       "This usually means the account has reached its project limit or belongs to an organisation that restricts projects. Ask your helper, or try a different Google account."
@@ -160,14 +157,14 @@ if $NEW_PROJECT; then
   spin "Looking for your captions project"
   load_projects
   spin_stop
-  if [ "${#PROJECTS[@]}" -gt 0 ]; then create_project ask; else create_project; fi
+  create_project
 else
   spin "Looking for your captions project"
   load_projects
   if [ "${#PROJECTS[@]}" -eq 0 ]; then
     spin_stop
     if $ROTATE; then
-      fail "There's no captioning server on this Google account." "Install first, or sign in as the church Google account that did."
+      fail "There's no captioning server on this Google account." "Install first, or sign in as the venue Google account that did."
     fi
     create_project
   elif [ "${#PROJECTS[@]}" -eq 1 ]; then
@@ -186,7 +183,7 @@ else
       read -rp "   Choice: " CHOICE
     fi
     if [ "$CHOICE" = new ] && ! $ROTATE && ! $NEW_KEY; then
-      create_project ask
+      create_project
     else
       [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#PROJECTS[@]}" ] || fail "That wasn't one of the choices."
       PROJECT="${PROJECTS[$((CHOICE - 1))]}"
@@ -195,6 +192,8 @@ else
   fi
 fi
 note "Project: ${DISPLAY} (${PROJECT})"
+STEP="preparing the project"
+spin "Preparing ${DISPLAY}"
 gcloud config set project "$PROJECT" >/dev/null 2>>"$LOG"
 
 # --------------------------------------------------------------------------- billing
@@ -239,7 +238,7 @@ REGION="${REGION:-}"
 if [ -z "$REGION" ] && [ -n "$EXISTING_REGION" ] && ! $RESELECT; then REGION="$EXISTING_REGION"; fi
 
 if $ROTATE; then
-  [ -n "$EXISTING_REGION" ] || fail "There's no captioning server on this Google account." "Install first, or sign in as the church Google account that did."
+  [ -n "$EXISTING_REGION" ] || fail "There's no captioning server on this Google account." "Install first, or sign in as the venue Google account that did."
   STEP="issuing a new sound desk link"
   spin "Issuing a new sound desk link"
   gcloud run services update "$SERVICE" --region "$EXISTING_REGION" --update-env-vars="SPEAKER_TOKEN=${TOKEN},BILLING_ACCOUNT=${BILLING}" --quiet >/dev/null 2>>"$LOG" ||
@@ -334,7 +333,7 @@ background() {
       --cpu=1 --memory=512Mi \
       --service-account="$run_sa" \
       --build-service-account="projects/${PROJECT}/serviceAccounts/${build_sa}" \
-      --update-env-vars="SPEAKER_TOKEN=${TOKEN},BILLING_ACCOUNT=${BILLING}" \
+      --update-env-vars="^@^SPEAKER_TOKEN=${TOKEN}@BILLING_ACCOUNT=${BILLING}@VENUE_NAME=${DISPLAY}" \
       --quiet >"$WORK/deploy.out" 2>&1; then
       cat "$WORK/deploy.out"
       break

@@ -1,4 +1,4 @@
-// Launcher. Built into each church's image once and never rebuilt, so keep this file tiny and
+// Launcher. Built into each venue's image once and never rebuilt, so keep this file tiny and
 // never change its contract: the bundle exports start() (resolves when listening) and stop().
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";

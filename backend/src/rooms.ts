@@ -58,7 +58,7 @@ function languageName(code: string): string {
 }
 
 /**
- * Everything for one church: the sound desk connection, listeners grouped by language, and the
+ * Everything for one venue: the sound desk connection, listeners grouped by language, and the
  * Soniox streams. Streams exist only while the speaker is live, not paused, someone needs that
  * language, and audio has arrived in the last `silenceMs`.
  */

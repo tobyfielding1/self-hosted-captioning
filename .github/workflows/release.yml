@@ -106,6 +106,6 @@ jobs:
         run: |
           gh release view backend-latest >/dev/null 2>&1 || gh release create backend-latest \
             --title "Backend (latest)" --latest=false \
-            --notes "Churches' servers download server.mjs from here each time they start. Published automatically by CI."
+            --notes "Venues' servers download server.mjs from here each time they start. Published automatically by CI."
           gh release upload backend-latest server.mjs server.mjs.sha256 --clobber
           echo "Published $(cut -c1-12 server.mjs.sha256)" >> "$GITHUB_STEP_SUMMARY"

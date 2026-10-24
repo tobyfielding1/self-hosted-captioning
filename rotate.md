@@ -4,7 +4,7 @@ Use this if the sound desk link was shared with someone who shouldn't have it. I
 
 ## Start
 
-Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the church Google account.
+Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the venue Google account.
 
 ```bash
 ./deploy.sh --rotate-token

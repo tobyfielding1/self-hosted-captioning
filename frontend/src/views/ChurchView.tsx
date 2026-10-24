@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { getBackend, getStatus, getToken, isSetupPage, listenerLink, protocolSupported, setupUrl, siteRoot, speakLink, type Status } from "../backend";
+import { checkDeskAccess, getBackend, getStatus, getToken, isSetupPage, listenerLink, protocolSupported, setupUrl, siteRoot, speakLink, type DeskAccess, type Status } from "../backend";
 import { Banner, Button, Card, copyText, Details } from "../ui";
 import SpeakView from "./SpeakView";
 
@@ -17,26 +17,53 @@ const NEWKEY_URL = shellUrl("newkey.md");
 const DELETE_URL = shellUrl("delete.md");
 const SONIOX_PROJECT = "https://console.soniox.com/org/projects/settings";
 const SONIOX_KEYS = "https://console.soniox.com/org/projects/api/keys";
-// Church images freeze their Node major version; below this they need a re-install.
+// Venue images freeze their Node major version; below this they need a re-install.
 const MIN_NODE_MAJOR = 24;
 const TIP_DISMISSED = "captioning.fasterTipDismissed";
 
-/** The church team's page: an intro, the setup wizard at /setup, or the sound desk when the address is a sound desk link. */
+/** The venue team's page: an intro, the setup wizard at /setup, or the sound desk when the address is a sound desk link. */
 export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
   const backend = getBackend();
   const token = getToken();
   const [status, setStatus] = useState<Status | null | undefined>(undefined);
-  const installed = !!backend && !!token;
+  const [access, setAccess] = useState<DeskAccess | "checking">("checking");
+  const allowed = !!backend && !!token && (access === "ok" || access === "legacy");
 
   useEffect(() => {
-    if (!backend) return;
+    if (!backend || !token) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const run = () => {
+      void checkDeskAccess(backend, token).then((result) => {
+        if (cancelled) return;
+        setAccess(result);
+        if (result === "down") timer = setTimeout(run, 3000);
+      });
+    };
+    setAccess("checking");
+    run();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [backend, token]);
+
+  useEffect(() => {
+    if (!backend || !allowed) return;
     void getStatus(backend).then(setStatus);
-  }, [backend]);
+  }, [backend, allowed]);
+
+  useEffect(() => {
+    if (allowed && status?.venue) document.title = status.venue;
+  }, [allowed, status?.venue]);
 
   return (
     <main className="max-w-2xl mx-auto p-4 space-y-4 print:p-0 print:max-w-none">
-      {installed ? (
+      {backend && token && !allowed ? (
+        <DeskGate access={access === "bad" || access === "down" ? access : "checking"} />
+      ) : allowed ? (
         <>
+          {status?.venue && <h1 className="text-3xl font-bold print:hidden">{status.venue}</h1>}
           <Notices status={status} />
           <SpeakView
             settings={<Delete status={status} />}
@@ -57,6 +84,24 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
   );
 }
 
+function DeskGate({ access }: { access: "checking" | "down" | "bad" }) {
+  if (access === "bad") {
+    return (
+      <Banner tone="warn">
+        <p className="font-semibold">This sound desk link isn't valid.</p>
+        <p>Ask whoever set up captions for the current link.</p>
+      </Banner>
+    );
+  }
+  return (
+    <p className="text-lg text-gray-700">
+      {access === "down"
+        ? "The captioning server isn't answering yet, so this link can't be checked. Trying again."
+        : "Checking this sound desk link..."}
+    </p>
+  );
+}
+
 // ----------------------------------------------------------------------------- intro
 
 function Intro() {
@@ -64,11 +109,11 @@ function Intro() {
     <>
       <h1 className="text-3xl font-bold">Live captions</h1>
       <p className="text-lg text-gray-700">
-        Captions and translation for a church service. The sound desk runs them from a laptop. People follow on their phones.
+        Captions and translation for a venue. The sound desk runs them from a laptop. People follow on their phones.
       </p>
       <Card title="Set up once">
         <p className="text-lg">
-          You do this on the church Google account. It takes about 15 minutes. Each church gets its own server, sound desk
+          You do this on the venue Google account. It takes about 15 minutes. Each venue gets its own server, sound desk
           link, and QR code.
         </p>
         <p>
@@ -109,7 +154,7 @@ function Wizard() {
       {step === 1 && (
         <Card title="Step 1 of 2: Make sure you have Google Cloud billing">
           <p className="text-lg">
-            Sign in with the church Google account and add a card. You won't be charged for normal use: the captioning
+            Sign in with your Google account and add a card. You won't be charged for normal use: the captioning
             server fits in Google's free tier.
           </p>
           <a
@@ -128,9 +173,9 @@ function Wizard() {
       {step === 2 && (
         <Card title='Step 2 of 2: Click "Install on Google Cloud"'>
           <p className="text-lg">
-            A Google page opens with instructions on the right. Start the install there. While Google Cloud sets up, it
-            walks you through creating a Soniox account (Soniox turns speech into captions and translations) and asks
-            you to paste a key. Everything else is automatic.
+            A Google page opens with instructions on the right. Start the install there. It asks what to call this
+            venue. Press Enter to keep the name Live captions. While Google Cloud sets up, it walks you through creating
+            a Soniox account (Soniox turns speech into captions and translations) and asks you to paste a key.
           </p>
           <p className="text-gray-600">
             See{" "}
@@ -194,7 +239,6 @@ function Finished({
   const canvas = useRef<HTMLCanvasElement>(null);
   const listen = listenerLink(backend);
   const speak = speakLink(backend, token);
-  const intro = siteRoot();
 
   useEffect(() => {
     if (canvas.current) void QRCode.toCanvas(canvas.current, listen, { width: 280, margin: 2, errorCorrectionLevel: "M" });
@@ -258,15 +302,6 @@ function Finished({
         <Button variant="secondary" onClick={() => window.print()}>
           Print the card
         </Button>
-
-        <h3 className="font-semibold pt-3">Another church</h3>
-        <p>Send them the captions page. It explains how this works, and they set up their own from there.</p>
-        <div className="flex flex-wrap gap-3">
-          <Button onClick={() => copy("church", intro)}>{copied === "church" ? "Copied" : "Copy the page"}</Button>
-          <a className="inline-block underline text-blue-800 self-center" href={intro} target="_blank" rel="noreferrer">
-            Open the page
-          </a>
-        </div>
       </Details>
 
       <Spending status={status} />
@@ -310,7 +345,7 @@ function Notices({ status }: { status: Status | null | undefined }) {
         >
           <p className="font-semibold">Captions can be faster (optional)</p>
           <p>
-            Your church is closer to Soniox's {status.sonioxFasterRegion.toUpperCase()} region. At console.soniox.com,
+            Your venue is closer to Soniox's {status.sonioxFasterRegion.toUpperCase()} region. At console.soniox.com,
             request access to that region, create a project in it, and make an API key there. Then{" "}
             <a className="underline" href={NEWKEY_URL} target="_blank" rel="noreferrer">
               rotate the Soniox key
@@ -357,7 +392,7 @@ function Spending({ status }: { status: Status | null | undefined }) {
       <p>
         Captions are billed in two places. Soniox charges for turning speech into captions and translations. Google Cloud
         charges for hosting the server, which normal use keeps inside the free tier, and for Google Translate on the
-        languages that use it. Sign in with the church account on each site.
+        languages that use it. Sign in with your account on each site.
       </p>
       <div>
         <p className="font-semibold">Soniox</p>
@@ -414,7 +449,7 @@ function Delete({ status }: { status: Status | null | undefined }) {
   return (
     <div className="space-y-3 pt-2">
       <h3 className="font-semibold">Rotate the sound desk link</h3>
-      <p>If the sound desk link got out, issue a new one. The old link stops working. The QR code stays the same. This page closes so it cannot keep using the old link.</p>
+      <p>If the sound desk link was shared with someone who shouldn't have it, issue a new one. The old link stops working. The QR code stays the same. This page closes so the old link is not left open here.</p>
       <Button variant="secondary" onClick={startNewDeskLink}>
         Rotate sound desk link
       </Button>

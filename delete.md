@@ -8,7 +8,7 @@ Click **Start**. The next page has one command to copy into the terminal.
 
 ## Delete the project
 
-Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the church Google account.
+Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the venue Google account.
 
 ```bash
 ./delete.sh

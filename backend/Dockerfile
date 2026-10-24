@@ -1,5 +1,5 @@
-# Built once per church by `gcloud run deploy --source`. The Node major version here is frozen
-# for that church until they re-run the install, so only bump it deliberately.
+# Built once per venue by `gcloud run deploy --source`. The Node major version here is frozen
+# for that venue until they re-run the install, so only bump it deliberately.
 FROM node:24-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./

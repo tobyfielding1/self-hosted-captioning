@@ -8,7 +8,7 @@ It asks what to call this venue, so you can tell it apart from the first. Press 
 
 ## Start
 
-Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the church Google account.
+Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the venue Google account.
 
 ```bash
 ./deploy.sh --new-project

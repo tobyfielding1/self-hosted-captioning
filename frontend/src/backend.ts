@@ -28,6 +28,8 @@ export interface Status {
   project?: string | null;
   /** Billing account linked to that project. Missing until the install records it. */
   billingAccount?: string | null;
+  /** Name chosen at install. Missing until that install records it. */
+  venue?: string | null;
   sonioxRegion: string | null;
   sonioxFasterRegion: string | null;
   model: string | null;
@@ -83,7 +85,7 @@ export function siteRoot(): string {
   return `${location.origin}${import.meta.env.BASE_URL}`;
 }
 
-/** The install wizard. A second venue starts here; a new church reads the intro first. */
+/** The install wizard. A second venue starts here; a new venue reads the intro first. */
 export function setupUrl(): string {
   return `${siteRoot()}setup/`;
 }
@@ -104,6 +106,25 @@ export function listenerLink(backend = getBackend()): string {
 
 export function speakLink(backend = getBackend(), token = getToken()): string {
   return `${siteRoot()}#backend=${encodeURIComponent(backend ?? "")}&token=${encodeURIComponent(token ?? "")}`;
+}
+
+export type DeskAccess = "ok" | "bad" | "down" | "legacy";
+
+/** The sound desk page is allowed only when this server accepts the token. A server that predates the check returns 404. */
+export async function checkDeskAccess(backend = getBackend(), token = getToken()): Promise<DeskAccess> {
+  if (!backend || !token) return "bad";
+  try {
+    const res = await fetch(`${backend}/speaker-check`, {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 404) return "legacy";
+    if (res.status === 401) return "bad";
+    return res.ok ? "ok" : "down";
+  } catch {
+    return "down";
+  }
 }
 
 export async function getStatus(backend = getBackend()): Promise<Status | null> {

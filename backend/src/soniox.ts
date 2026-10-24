@@ -3,7 +3,7 @@ import tls from "node:tls";
 import WebSocket from "ws";
 
 // Soniox regional hosts follow api.<r>.soniox.com / stt-rt.<r>.soniox.com, with "" meaning the US root.
-// Adding a region here ships to every church through auto-update.
+// Adding a region here ships to every venue through auto-update.
 export const SONIOX_REGIONS = ["", "eu", "jp", "in"];
 
 const host = (service: "api" | "stt-rt", region: string) =>

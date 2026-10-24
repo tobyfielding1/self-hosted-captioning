@@ -43,6 +43,7 @@ export default function ListenView() {
   const [dark, setDark] = useState(() => localStorage.getItem(STORE.dark) === "1");
   const [follow, setFollow] = useState(true);
   const [attempt, setAttempt] = useState(0);
+  const [venue, setVenue] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
   useWakeLock(phase === "live");
@@ -54,14 +55,19 @@ export default function ListenView() {
 
   useEffect(() => localStorage.setItem(STORE.size, String(size)), [size]);
 
+  useEffect(() => {
+    if (venue) document.title = venue;
+  }, [venue]);
+
   // The language list comes from the server, retrying while it wakes up.
   useEffect(() => {
     if (!backend) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const load = async () => {
-      const l = await getLanguages();
+      const [l, s] = await Promise.all([getLanguages(), getStatus()]);
       if (cancelled) return;
+      if (s?.venue) setVenue(s.venue);
       if (l && l.targets.length) setLanguages(l);
       else timer = setTimeout(load, 5000);
     };
@@ -100,6 +106,7 @@ export default function ListenView() {
       if (stopped) return;
       const status = await getStatus();
       if (stopped) return;
+      if (status?.venue) setVenue(status.venue);
       if (status && !protocolSupported(status)) return setPhase("outdated");
       if (status?.live) return connect();
       setPhase("waiting");
@@ -203,15 +210,15 @@ export default function ListenView() {
       <Shell dark={dark}>
         <div className="max-w-xl mx-auto p-6 space-y-6">
           <h1 className="text-3xl font-bold">Live captions</h1>
-          <p className="text-2xl">To follow live captions, scan the QR code at your church with your phone camera.</p>
+          <p className="text-2xl">To follow live captions, scan the QR code at your venue with your phone camera.</p>
           <a href={setupUrl()} className="inline-block text-base text-gray-500 underline">
-            Setting up captions for your church?
+            Setting up captions for your venue?
           </a>
         </div>
       </Shell>
     );
 
-  if (choosing) return <LanguageChooser languages={languages} current={lang} onChoose={choose} onCancel={lang ? () => setChoosing(false) : undefined} dark={dark} />;
+  if (choosing) return <LanguageChooser languages={languages} current={lang} venue={venue} onChoose={choose} onCancel={lang ? () => setChoosing(false) : undefined} dark={dark} />;
 
   const empty = !caption.lines.length && !caption.current && !caption.partial;
   let message: string | null = null;
@@ -219,14 +226,16 @@ export default function ListenView() {
   else if (phase === "waiting") message = "Waiting for the service to start. This page will connect by itself.";
   else if (phase === "ended") message = "The service has ended.";
   else if (phase === "gave-up") message = "No service has started yet.";
-  else if (phase === "outdated") message = "Captions need an update. Please ask the church to re-run the install.";
+  else if (phase === "outdated") message = "Captions need an update. Please ask the venue to re-run the install.";
   else if (phase === "unsupported") message = "This language isn't available. Please choose another.";
   else if (paused) message = "Captions paused";
   else if (phase === "live" && empty) message = "Live. Captions will appear when someone speaks.";
 
   return (
     <Shell dark={dark}>
-      <header className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-800">
+      <header className="border-b border-gray-200 dark:border-gray-800">
+        {venue && <p className="px-5 pt-3 text-lg font-semibold truncate">{venue}</p>}
+        <div className="flex items-center gap-2 px-3 py-2">
         <button
           onClick={() => setChoosing(true)}
           className="flex-1 text-left text-lg font-semibold truncate rounded-lg px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-900"
@@ -243,6 +252,7 @@ export default function ListenView() {
         <IconButton label={dark ? "Light mode" : "Dark mode"} onClick={() => setDark((d) => !d)}>
           {dark ? "☀" : "☾"}
         </IconButton>
+        </div>
       </header>
 
       <div ref={scroller} onScroll={onScroll} className="flex-1 overflow-y-auto px-5 py-4" style={{ fontSize: SIZES[size], lineHeight: 1.35 }}>
@@ -301,7 +311,7 @@ function IconButton({ label: text, onClick, children }: { label: string; onClick
 }
 
 const VIA_HINT = {
-  soniox: "Soniox: live, word by word, with faster and more natural translation. Also cheaper for your church.",
+  soniox: "Soniox: live, word by word, with faster and more natural translation. Also cheaper for your venue.",
   google: "Google Translate: a sentence at a time, just after it's spoken. Used for languages Soniox doesn't offer.",
 };
 
@@ -319,12 +329,14 @@ function ViaTag({ via }: { via: "soniox" | "google" }) {
 function LanguageChooser({
   languages,
   current,
+  venue,
   onChoose,
   onCancel,
   dark,
 }: {
   languages: Languages | null;
   current: string | null;
+  venue: string | null;
   onChoose: (code: string) => void;
   onCancel?: () => void;
   dark: boolean;
@@ -353,6 +365,7 @@ function LanguageChooser({
   return (
     <Shell dark={dark}>
       <div className="max-w-xl w-full mx-auto flex flex-col h-full p-4 gap-3">
+        {venue && <p className="text-lg font-semibold text-gray-600 dark:text-gray-300">{venue}</p>}
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold flex-1">Choose your language</h1>
           {onCancel && (
@@ -372,7 +385,7 @@ function LanguageChooser({
         {!languages && <p className="text-gray-500">Loading languages...</p>}
         {languages && (
           <p className="text-sm text-gray-500">
-            <ViaTag via="soniox" /> appears word by word, with faster, more natural translation, and costs your church
+            <ViaTag via="soniox" /> appears word by word, with faster, more natural translation, and costs your venue
             less. <ViaTag via="google" /> appears a sentence at a time. If your language has both, choose Soniox.
           </p>
         )}

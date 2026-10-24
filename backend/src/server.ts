@@ -62,6 +62,7 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
     region,
     project,
     billingAccount: process.env.BILLING_ACCOUNT || null,
+    venue: process.env.VENUE_NAME || null,
     sonioxRegion: catalog.sonioxRegion === null ? null : regionLabel(catalog.sonioxRegion),
     sonioxFasterRegion: catalog.sonioxFasterRegion,
     model: catalog.model,
@@ -72,6 +73,7 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
 
   const server = http.createServer((req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization");
     res.setHeader("Cache-Control", "no-store");
     if (req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -83,6 +85,16 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify(body));
     };
+    if (path === "/speaker-check") {
+      const header = req.headers.authorization ?? "";
+      const given = header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
+      if (!speakerToken || !tokenMatches(given, speakerToken)) {
+        res.writeHead(401).end();
+        return;
+      }
+      res.writeHead(204).end();
+      return;
+    }
     if (path === "/status") return json({ live: hub.live, paused: hub.paused, ...info(), ready: !!catalog.model, error: catalog.error });
     if (path === "/languages") return json(catalog.languages());
     if (path === "/" || path === "/healthz") return json({ ok: true });

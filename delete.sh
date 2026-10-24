@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Removes the church's captioning project from Google Cloud.
+# Removes the venue's captioning project from Google Cloud.
 # Safe leftovers: the Soniox account and the Google billing account, which this
 # script did not create. Normally run from Cloud Shell via the captions website.
 set -euo pipefail
@@ -49,7 +49,7 @@ trap 'fail "Something went wrong while ${STEP}." "Copy the text above and send i
 
 bold "Remove live captions from Google Cloud"
 ACCOUNT="$(gcloud config get-value account 2>>"$LOG" || true)"
-[ -n "$ACCOUNT" ] || fail "You're not signed in to Google Cloud." "Open this page from the church Google account: https://shell.cloud.google.com"
+[ -n "$ACCOUNT" ] || fail "You're not signed in to Google Cloud." "Open this page from the venue Google account: https://shell.cloud.google.com"
 
 STEP="finding your Google Cloud project"
 spin "Looking for your captions project"
