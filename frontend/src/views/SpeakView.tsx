@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { audioSupported, guessMode, listInputs, startCapture, type Capture, type InputMode } from "../audio/capture";
 import { calibrate, DEFAULT_THRESHOLD, FRAME_MS, Gate, MAX_THRESHOLD, MIN_THRESHOLD } from "../audio/gate";
-import { getBackend, getStatus, getToken, protocolSupported, type Status } from "../backend";
+import { getBackend, getStatus, getToken, listenerLink, protocolSupported, type Status } from "../backend";
 import { englishName } from "../lib/languages";
 import { useWakeLock, wakeLockSupported } from "../lib/wakeLock";
 import { SpeakerConnection, type ConnState, type Preview, type ServerMessage, type Stats } from "../speaker";
@@ -397,7 +397,10 @@ export default function SpeakView() {
         {live && (
           <p className="text-gray-700">
             Keep this tab open.{" "}
-            {wakeLockSupported() ? (wakeLock ? "The screen will stay on." : "") : "Turn off sleep on this device."}
+            {wakeLockSupported() ? (wakeLock ? "The screen will stay on." : "") : "Turn off sleep on this device."}{" "}
+            <a className="underline text-blue-800" href={listenerLink()} target="_blank" rel="noreferrer">
+              Open the congregation view
+            </a>
           </p>
         )}
 

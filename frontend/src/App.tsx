@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { currentView, getBackend, type View } from "./backend";
+import { currentView, type View } from "./backend";
 import ListenView from "./views/ListenView";
 import SetupView from "./views/SetupView";
 import SpeakView from "./views/SpeakView";
@@ -30,11 +30,6 @@ export default function App() {
           <Tab to="setup" view={view}>
             Setup
           </Tab>
-          {getBackend() && (
-            <Tab to="listen" view={view}>
-              Captions
-            </Tab>
-          )}
         </div>
       </nav>
       {view === "speak" ? <SpeakView /> : <SetupView />}

@@ -246,6 +246,9 @@ function Finished({ backend, token }: { backend: string; token: string }) {
               {copied === "listen" ? "Copied" : "Copy listener link"}
             </Button>
           </div>
+          <a className="inline-block underline text-blue-800" href={listen} target="_blank" rel="noreferrer">
+            Open the congregation view
+          </a>
         </Card>
 
         <Card title="Sunday checklist">

@@ -188,7 +188,13 @@ export default function ListenView() {
   if (!backend)
     return (
       <Shell dark={dark}>
-        <p className="p-6 text-2xl">This link is incomplete. Please scan the QR code again.</p>
+        <div className="max-w-xl mx-auto p-6 space-y-6">
+          <h1 className="text-3xl font-bold">Live captions</h1>
+          <p className="text-2xl">To follow live captions, scan the QR code at your church with your phone camera.</p>
+          <a href="#setup" className="inline-block text-base text-gray-500 underline">
+            Setting up captions for your church? Go to Setup
+          </a>
+        </div>
       </Shell>
     );
 
