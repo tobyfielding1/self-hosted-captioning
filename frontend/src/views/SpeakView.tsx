@@ -27,7 +27,10 @@ function describeListeners(listeners: Record<string, number>): string {
   return `${plural(total)} following (${parts.join(", ")})`;
 }
 
-export default function SpeakView({ extras }: { extras?: (panels: ReactNode) => ReactNode } = {}) {
+export default function SpeakView({
+  extras,
+  settings,
+}: { extras?: (panels: ReactNode) => ReactNode; settings?: ReactNode } = {}) {
   const backend = getBackend();
   const token = getToken();
   const supported = audioSupported();
@@ -421,7 +424,7 @@ export default function SpeakView({ extras }: { extras?: (panels: ReactNode) => 
 
   const panels = (
     <>
-      <Details summary="Advanced">
+      <Details summary="Settings">
         <fieldset className="space-y-1">
           <legend className="font-semibold">Input type</legend>
           {(["desk", "mic"] as const).map((m) => (
@@ -454,6 +457,7 @@ export default function SpeakView({ extras }: { extras?: (panels: ReactNode) => 
           Server: {backend}
           {status && ` (version ${status.version})`}
         </p>
+        {settings}
       </Details>
 
       <Details summary="Help">

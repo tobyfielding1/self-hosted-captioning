@@ -46,6 +46,7 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
         <>
           <Notices status={status} />
           <SpeakView
+            settings={<Delete status={status} />}
             extras={(panels) => (
               <>
                 <Finished backend={backend!} token={token!} open={shareOpen || justInstalled} status={status} />
@@ -385,34 +386,38 @@ function Spending({ status }: { status: Status | null | undefined }) {
           </p>
         )}
       </div>
-      <div>
-        <p className="font-semibold">Delete</p>
-        <p>
-          This removes the captioning server and the Google Cloud project the install created
-          {project ? ` (${project})` : ""}. Google keeps a deleted project for 30 days if you change your mind.
-        </p>
-        <a
-          href={DELETE_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-block bg-red-700 hover:bg-red-800 text-white font-semibold px-4 py-2.5 rounded-xl"
-        >
-          Delete from Google Cloud
-        </a>
-        <p>These stay, because the install did not create them:</p>
-        <ul className="list-disc pl-5 space-y-1">
-          <li>
-            Your Soniox account, remaining credit and autopay.{" "}
-            <ExtLink href={SONIOX_ACCOUNT}>Delete the Soniox account</ExtLink>
-          </li>
-          <li>
-            Your Google billing account and card.{" "}
-            <ExtLink href={GOOGLE_BILLING}>Close the Google billing account</ExtLink> (pick the account, then Account
-            management → Close billing account). Only close it if you created it for captions and nothing else uses it.
-          </li>
-        </ul>
-      </div>
     </Details>
+  );
+}
+
+function Delete({ status }: { status: Status | null | undefined }) {
+  const project = status?.project;
+  return (
+    <div className="space-y-3 pt-2">
+      <p>
+        Delete removes the captioning server and the Google Cloud project the install created
+        {project ? ` (${project})` : ""}. Google keeps a deleted project for 30 days if you change your mind.
+      </p>
+      <a
+        href={DELETE_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-block bg-red-700 hover:bg-red-800 text-white font-semibold px-4 py-2.5 rounded-xl"
+      >
+        Delete from Google Cloud
+      </a>
+      <p>These stay, because the install did not create them:</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>
+          Your Soniox account, remaining credit and autopay. <ExtLink href={SONIOX_ACCOUNT}>Delete the Soniox account</ExtLink>
+        </li>
+        <li>
+          Your Google billing account and card. <ExtLink href={GOOGLE_BILLING}>Close the Google billing account</ExtLink>{" "}
+          (pick the account, then Account management → Close billing account). Only close it if you created it for
+          captions and nothing else uses it.
+        </li>
+      </ul>
+    </div>
   );
 }
 
