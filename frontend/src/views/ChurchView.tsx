@@ -1,8 +1,11 @@
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { getBackend, getStatus, getToken, listenerLink, protocolSupported, setBackend, setToken, speakLink, type Status } from "../backend";
-import { Banner, Button, Card, copyText } from "../ui";
+import { Banner, Button, Card, copyText, Details } from "../ui";
 import SpeakView from "./SpeakView";
+
+const SONIOX_USAGE = "https://console.soniox.com/org/projects/usage/cost";
+const SONIOX_BILLING = "https://console.soniox.com/org/billing/reports";
 
 const REPO = "https://github.com/tobyfielding1/self-hosted-captioning";
 const INSTALL_URL = `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_tutorial=deploy.md&show=terminal`;
@@ -195,10 +198,38 @@ function Finished({ backend, token, open }: { backend: string; token: string; op
 
   return (
     <>
-      <details open={open} className="print:hidden pt-4">
-        <summary className="cursor-pointer select-none text-xl font-bold py-2">Share and set up</summary>
-        <div className="space-y-4 pt-2">
+      <div className="space-y-4 print:hidden">
+      <Details summary="Share" open={open}>
+        <h3 className="font-semibold">Sound desk link</h3>
+        <p>Open this once on the sound desk computer and bookmark it as "Captions". Keep it private.</p>
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={() => copy("speak", speak)}>{copied === "speak" ? "Copied" : "Copy link"}</Button>
+          <a href={mailto} className="bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50">
+            Email to sound desk team
+          </a>
+        </div>
 
+        <h3 className="font-semibold pt-3">QR code for the congregation</h3>
+        <p>People scan this with their phone camera to follow along. It never changes, even after updates.</p>
+        <canvas ref={canvas} className="rounded-lg border border-gray-200" />
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={downloadQr}>Download QR code (PNG)</Button>
+          <Button variant="secondary" onClick={() => copy("listen", listen)}>
+            {copied === "listen" ? "Copied" : "Copy listener link"}
+          </Button>
+        </div>
+        <a className="inline-block underline text-blue-800" href={listen} target="_blank" rel="noreferrer">
+          Open the congregation view
+        </a>
+
+        <h3 className="font-semibold pt-3">Sunday checklist</h3>
+        <p>A one-page card for the sound desk.</p>
+        <Button variant="secondary" onClick={() => window.print()}>
+          Print the card
+        </Button>
+      </Details>
+
+      <Details summary="Set up" open={open || status === null || !!status?.error || !!needsReinstall}>
         {status === undefined && <Banner>Checking the captioning server...</Banner>}
         {status === null && (
           <Banner tone="warn">The captioning server isn't answering yet. If you've only just installed it, wait a minute and reload.</Banner>
@@ -233,42 +264,85 @@ function Finished({ backend, token, open }: { backend: string; token: string; op
             </p>
           </Banner>
         )}
+      </Details>
 
-        <Card title="Sound desk link">
-          <p>Open this once on the sound desk computer and bookmark it as "Captions". Keep it private.</p>
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={() => copy("speak", speak)}>{copied === "speak" ? "Copied" : "Copy link"}</Button>
-            <a href={mailto} className="bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50">
-              Email to sound desk team
-            </a>
-          </div>
-        </Card>
-
-        <Card title="QR code for the congregation">
-          <p>People scan this with their phone camera to follow along. It never changes, even after updates.</p>
-          <canvas ref={canvas} className="rounded-lg border border-gray-200" />
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={downloadQr}>Download QR code (PNG)</Button>
-            <Button variant="secondary" onClick={() => copy("listen", listen)}>
-              {copied === "listen" ? "Copied" : "Copy listener link"}
-            </Button>
-          </div>
-          <a className="inline-block underline text-blue-800" href={listen} target="_blank" rel="noreferrer">
-            Open the congregation view
-          </a>
-        </Card>
-
-        <Card title="Sunday checklist">
-          <p>A one-page card for the sound desk.</p>
-          <Button variant="secondary" onClick={() => window.print()}>
-            Print the card
-          </Button>
-        </Card>
-        </div>
-      </details>
+      <Spending status={status} />
+      </div>
 
       <SundayCard />
     </>
+  );
+}
+
+function ExtLink({ href, children }: { href: string; children: string }) {
+  return (
+    <a className="underline text-blue-800" href={href} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  );
+}
+
+function googleProjectUrl(project: string) {
+  return `https://console.cloud.google.com/home/dashboard?project=${encodeURIComponent(project)}`;
+}
+
+/** The project's linked billing account. Reports, grouped by service, splits the charges. */
+function googleBillingUrl(project: string) {
+  return `https://console.cloud.google.com/billing/linkedaccount?project=${encodeURIComponent(project)}`;
+}
+
+function googleServerUrl(project: string, region: string) {
+  return `https://console.cloud.google.com/run/detail/${encodeURIComponent(region)}/captioning?project=${encodeURIComponent(project)}`;
+}
+
+function Spending({ status }: { status: Status | null | undefined }) {
+  const project = status?.project;
+  return (
+    <Details summary="Spending">
+      <p>
+        Captions are billed in two places. Soniox charges for turning speech into captions and translations. Google Cloud
+        charges for hosting the server, which normal use keeps inside the free tier, and for Google Translate on the
+        languages that use it. Sign in with the church account on each site.
+      </p>
+      <div>
+        <p className="font-semibold">Soniox</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>
+            <ExtLink href={SONIOX_USAGE}>Usage and cost</ExtLink> — what captions have cost, split by model.
+          </li>
+          <li>
+            <ExtLink href={SONIOX_BILLING}>Credit and charges</ExtLink> — remaining balance, top-ups and autopay.
+          </li>
+        </ul>
+      </div>
+      <div>
+        <p className="font-semibold">Google Cloud</p>
+        {project ? (
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <ExtLink href={googleBillingUrl(project)}>Spending for this project</ExtLink> — then open Reports and group
+              by Service. Cloud Run is the server; Cloud Translation is the extra languages. Figures usually appear the
+              next day. The project is {project}.
+            </li>
+            <li>
+              <ExtLink href={googleProjectUrl(project)}>Open the project</ExtLink>
+              {status?.region ? (
+                <>
+                  {" "}
+                  · <ExtLink href={googleServerUrl(project, status.region)}>the captioning server</ExtLink>
+                </>
+              ) : null}
+            </li>
+          </ul>
+        ) : (
+          <p className="text-gray-600">
+            {status === undefined
+              ? "Checking which Google Cloud project this server is in."
+              : "The Google Cloud links appear once the captioning server reports its project."}
+          </p>
+        )}
+      </div>
+    </Details>
   );
 }
 

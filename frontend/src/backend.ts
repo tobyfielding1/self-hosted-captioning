@@ -12,6 +12,8 @@ export interface Status {
   protocol: number;
   node: string;
   region: string | null;
+  /** Google Cloud project this server runs in. Missing on a server that hasn't updated yet. */
+  project?: string | null;
   sonioxRegion: string | null;
   sonioxFasterRegion: string | null;
   model: string | null;

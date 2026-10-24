@@ -52,9 +52,9 @@ export function Card({ title, children }: { title?: ReactNode; children: ReactNo
   );
 }
 
-export function Details({ summary, children }: { summary: string; children: ReactNode }) {
+export function Details({ summary, open, children }: { summary: string; open?: boolean; children: ReactNode }) {
   return (
-    <details className="bg-white rounded-2xl border border-gray-200 p-4 group">
+    <details open={open} className="bg-white rounded-2xl border border-gray-200 p-4 group">
       <summary className="cursor-pointer font-semibold select-none">{summary}</summary>
       <div className="pt-3 space-y-3">{children}</div>
     </details>

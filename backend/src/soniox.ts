@@ -204,7 +204,7 @@ export function describeError(err: SonioxError, languageName: string): { message
     case "organization_balance_exhausted":
     case "organization_monthly_budget_exhausted":
     case "project_monthly_budget_exhausted":
-      return { message: "Soniox account is out of credit. Top up at console.soniox.com.", retryMs: 60_000 };
+      return { message: "Soniox account is out of credit. Top up under Billing at console.soniox.com.", retryMs: 60_000 };
     case "limit_exceeded":
     case "max_concurrent_connections_reached":
       return { message: `Soniox limit reached, so ${languageName} is unavailable right now.`, retryMs: 30_000 };

@@ -51,13 +51,16 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
   const catalog = new Catalog(key);
   catalog.start();
   let region: string | null = null;
+  let project: string | null = null;
   void gcp.region().then((r) => (region = r));
+  void gcp.projectId().then((id) => (project = id));
 
   const info = () => ({
     version: VERSION,
     protocol: PROTOCOL,
     node: process.versions.node,
     region,
+    project,
     sonioxRegion: catalog.sonioxRegion === null ? null : regionLabel(catalog.sonioxRegion),
     sonioxFasterRegion: catalog.sonioxFasterRegion,
     model: catalog.model,

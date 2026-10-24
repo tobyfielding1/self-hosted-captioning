@@ -431,11 +431,15 @@ export default function SpeakView() {
           <div>
             <dt className="font-semibold">It says "out of credit"</dt>
             <dd>
-              Top up at{" "}
-              <a className="underline text-blue-800" href="https://console.soniox.com" target="_blank" rel="noreferrer">
-                console.soniox.com
+              Top up under{" "}
+              <a className="underline text-blue-800" href="https://console.soniox.com/org/billing/reports" target="_blank" rel="noreferrer">
+                Billing
               </a>
-              , under Billing. Turning on "Enable autopay" there stops this happening again.
+              . Turn on "Enable autopay" under{" "}
+              <a className="underline text-blue-800" href="https://console.soniox.com/org/billing/payment-setup" target="_blank" rel="noreferrer">
+                Payment setup
+              </a>{" "}
+              so this doesn't happen again.
             </dd>
           </div>
           <div>
