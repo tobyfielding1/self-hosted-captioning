@@ -25,9 +25,33 @@ for arg in "$@"; do
   esac
 done
 
-bold() { printf '\n\033[1m%s\033[0m\n' "$*"; }
-note() { printf '   %s\n' "$*"; }
+# A spinner with a seconds counter, so quiet steps never look frozen. Any output stops it.
+SPIN_PID=""
+spin() {
+  spin_stop
+  if [ ! -t 1 ]; then printf '   %s...\n' "$1"; return 0; fi
+  (
+    frames='|/-\' i=0 start=$SECONDS
+    while :; do
+      printf '\r   %s %s... %ds ' "${frames:$((i++ % 4)):1}" "$1" $((SECONDS - start))
+      sleep 0.2
+    done
+  ) &
+  SPIN_PID=$!
+}
+spin_stop() {
+  [ -n "$SPIN_PID" ] || return 0
+  kill "$SPIN_PID" 2>/dev/null || true
+  wait "$SPIN_PID" 2>/dev/null || true
+  SPIN_PID=""
+  printf '\r\033[K'
+}
+trap spin_stop EXIT
+
+bold() { spin_stop; printf '\n\033[1m%s\033[0m\n' "$*"; }
+note() { spin_stop; printf '   %s\n' "$*"; }
 fail() {
+  spin_stop
   printf '\n\033[1;31m%s\033[0m\n' "$1"
   [ -n "${2:-}" ] && printf '%s\n' "$2"
   printf '\nWhen that is fixed, run this again:  ./deploy.sh\n\n'
@@ -42,6 +66,7 @@ bold "Setting up live captions"
 ACCOUNT="$(gcloud config get-value account 2>/dev/null || true)"
 [ -n "$ACCOUNT" ] || fail "You're not signed in to Google Cloud." "Open this page from the church Google account: https://shell.cloud.google.com"
 
+spin "Looking for your captions project"
 PROJECT="$(gcloud projects list --filter="labels.${LABEL/=/:}" --format='value(projectId)' --limit=1 2>/dev/null || true)"
 if [ -z "$PROJECT" ]; then
   PROJECT="captioning-$(openssl rand -hex 3)"
@@ -56,6 +81,7 @@ gcloud config set project "$PROJECT" >/dev/null 2>&1
 
 # --------------------------------------------------------------------------- billing
 STEP="checking billing"
+spin "Checking billing"
 BILLING="$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName)' 2>/dev/null || true)"
 BILLING="${BILLING#billingAccounts/}"
 if [ -z "$BILLING" ]; then
@@ -79,12 +105,16 @@ note "Billing: connected"
 
 # --------------------------------------------------------------------------- services
 STEP="turning on Google Cloud services"
-note "Turning on services (this can take a minute the first time)..."
+spin "Turning on Google Cloud services (a few minutes the first time)"
+ERRLOG="$(mktemp)"
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
-  translate.googleapis.com billingbudgets.googleapis.com cloudresourcemanager.googleapis.com --quiet >/dev/null
+  translate.googleapis.com billingbudgets.googleapis.com cloudresourcemanager.googleapis.com --quiet >/dev/null 2>"$ERRLOG" ||
+  { spin_stop; cat "$ERRLOG"; fail "Couldn't turn on the Google Cloud services."; }
+note "Services: on"
 
 # --------------------------------------------------------------------------- region
 STEP="choosing the closest region"
+spin "Choosing the closest region"
 REGION="${REGION:-}"
 EXISTING_REGION="$(gcloud run services list --filter="metadata.name=${SERVICE}" --format='value(region)' --limit=1 2>/dev/null || true)"
 if [ -z "$REGION" ] && [ -n "$EXISTING_REGION" ] && ! $RESELECT; then REGION="$EXISTING_REGION"; fi
@@ -97,7 +127,7 @@ if [ -z "$REGION" ]; then
   if [ -n "$CANDIDATE" ] && grep -qx "$CANDIDATE" <<<"$RUN_REGIONS"; then
     REGION="$CANDIDATE"
   else
-    note "Measuring which region is fastest from here..."
+    spin "Measuring which region is fastest from here"
     BEST_MS=999999
     for r in $RUN_REGIONS; do
       t="$(curl -s -o /dev/null -m 3 -w '%{time_connect}' "https://${r}-run.googleapis.com/" 2>/dev/null || echo 9)"
@@ -113,6 +143,7 @@ note "Region: ${REGION}"
 STEP="reading the current settings"
 CURRENT_ENV="{}"
 if [ -n "$EXISTING_REGION" ]; then
+  spin "Reading the current settings"
   CURRENT_ENV="$(gcloud run services describe "$SERVICE" --region="$EXISTING_REGION" --format=json 2>/dev/null |
     python3 -c 'import json,sys; s=json.load(sys.stdin); c=s["spec"]["template"]["spec"]["containers"][0]; print(json.dumps({e["name"]: e.get("value","") for e in c.get("env",[])}))' 2>/dev/null || echo '{}')"
 fi
@@ -142,6 +173,7 @@ if [ -z "$KEY" ] || $NEW_KEY; then
   KEY="$(tr -d '[:space:]' <<<"$KEY")"
   [ -n "$KEY" ] || fail "No key was pasted."
 fi
+spin "Checking your Soniox key"
 key_works "$KEY" || fail "Soniox didn't accept that key." \
   "Copy the key again from https://console.soniox.com (API keys), check the account has credit, then run: ./deploy.sh --new-key"
 note "Soniox key: OK"
@@ -151,6 +183,7 @@ if [ -z "$TOKEN" ] || $ROTATE; then TOKEN="$(openssl rand -hex 16)"; fi
 
 # --------------------------------------------------------------------------- service accounts
 STEP="setting up permissions"
+spin "Setting up permissions"
 RUN_SA="captioning-run@${PROJECT}.iam.gserviceaccount.com"
 BUILD_SA="captioning-build@${PROJECT}.iam.gserviceaccount.com"
 gcloud iam service-accounts describe "$RUN_SA" >/dev/null 2>&1 ||
@@ -170,6 +203,7 @@ grant "$BUILD_SA" roles/run.builder
 
 # --------------------------------------------------------------------------- budget alert
 STEP="creating a budget alert"
+spin "Checking the budget alert"
 if [ -n "$BILLING" ] || BILLING="$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName.basename())' 2>/dev/null)"; then
   if [ -z "$(gcloud billing budgets list --billing-account="$BILLING" --filter="displayName='Live captions alert'" --format='value(name)' 2>/dev/null || true)" ]; then
     CURRENCY="$(gcloud billing accounts describe "$BILLING" --format='value(currencyCode)' 2>/dev/null || echo GBP)"
@@ -185,6 +219,7 @@ fi
 
 # --------------------------------------------------------------------------- deploy
 STEP="installing the captioning server"
+spin_stop
 bold "Installing the captioning server (about 3 minutes)..."
 gcloud run deploy "$SERVICE" \
   --source backend \
@@ -201,6 +236,7 @@ gcloud run deploy "$SERVICE" \
 URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
 
 STEP="checking the server answers"
+spin "Checking the server answers"
 CODE="$(curl -s -o /dev/null -m 30 -w '%{http_code}' "${URL}/status" || true)"
 if [ "$CODE" = "403" ]; then
   fail "The server is installed, but your organisation blocks public access to it." \

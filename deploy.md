@@ -5,7 +5,7 @@
 Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**.
 
 ```bash
-./deploy.sh
+git pull -q --ff-only; ./deploy.sh
 ```
 
 Paste your Soniox key when it asks. Everything else is automatic and takes about 5 minutes.
