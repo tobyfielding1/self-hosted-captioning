@@ -9,6 +9,14 @@ export type Via = "soniox" | "google";
 
 const base = (code: string) => code.toLowerCase().split(/[-_]/)[0];
 
+function canonical(code: string): string {
+  try {
+    return Intl.getCanonicalLocales(code)[0] ?? code;
+  } catch {
+    return code;
+  }
+}
+
 function modelVersion(id: string): number {
   const m = id.match(/v(\d+)/);
   return m ? Number(m[1]) : -1;
@@ -54,8 +62,10 @@ export class Catalog {
 
   async refresh(): Promise<void> {
     clearTimeout(this.timer);
-    const [soniox] = await Promise.allSettled([this.refreshSoniox(), this.refreshGoogle()]);
-    const ok = soniox.status === "fulfilled";
+    // Google is often not ready for a few minutes after install (API just enabled, permissions
+    // propagating), so a failure on either side retries soon rather than waiting a day.
+    const results = await Promise.allSettled([this.refreshSoniox(), this.refreshGoogle()]);
+    const ok = results.every((r) => r.status === "fulfilled");
     this.timer = setTimeout(() => void this.refresh(), ok ? REFRESH_MS : RETRY_MS);
     this.timer.unref();
   }
@@ -101,6 +111,7 @@ export class Catalog {
       log.info("google catalog", { targets: this.googleTargets.size });
     } catch (e) {
       log.warn("google catalog failed", { err: String(e) });
+      throw e;
     }
   }
 
@@ -114,8 +125,13 @@ export class Catalog {
   }
 
   languages() {
-    const sonioxBases = new Set([...this.sonioxTargets].map(base));
-    const google = [...this.googleTargets].filter((c) => !sonioxBases.has(base(c)));
+    const sonioxBases = new Set([...this.sonioxTargets].map((c) => base(canonical(c))));
+    const google = [...this.googleTargets].filter((c) => {
+      const canon = canonical(c);
+      if (sonioxBases.has(base(canon))) return false;
+      // Google also lists legacy aliases (iw for he, jw for jv); keep only the current code.
+      return canon === c || !this.googleTargets.has(canon);
+    });
     return {
       speech: this.speech,
       targets: [

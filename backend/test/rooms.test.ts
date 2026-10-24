@@ -181,6 +181,16 @@ describe("catalog", () => {
       { code: "haw", via: "google" },
     ]);
   });
+
+  it("offers each Google-only language once, under its current code", () => {
+    app.catalog.sonioxTargets = new Set(["en", "he", "tl"]);
+    app.catalog.googleTargets = new Set(["iw", "he", "jw", "jv", "fil", "yue", "zh-TW"]);
+    const google = app.catalog
+      .languages()
+      .targets.filter((t) => t.via === "google")
+      .map((t) => t.code);
+    expect(google.sort()).toEqual(["jv", "yue", "zh-TW"]);
+  });
 });
 
 describe("cost guard", () => {
