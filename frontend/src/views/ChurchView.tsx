@@ -8,7 +8,12 @@ const SONIOX_USAGE = "https://console.soniox.com/org/projects/usage/cost";
 const SONIOX_BILLING = "https://console.soniox.com/org/billing/reports";
 
 const REPO = "https://github.com/tobyfielding1/self-hosted-captioning";
-const INSTALL_URL = `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_tutorial=deploy.md&show=terminal`;
+const shellUrl = (tutorial: string) =>
+  `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_tutorial=${tutorial}&show=terminal`;
+const INSTALL_URL = shellUrl("deploy.md");
+const DELETE_URL = shellUrl("delete.md");
+const SONIOX_ACCOUNT = "https://console.soniox.com/org/settings";
+const GOOGLE_BILLING = "https://console.cloud.google.com/billing";
 // Church images freeze their Node major version; below this they need a re-install.
 const MIN_NODE_MAJOR = 24;
 const TIP_DISMISSED = "captioning.fasterTipDismissed";
@@ -264,6 +269,34 @@ function Finished({ backend, token, open }: { backend: string; token: string; op
             </p>
           </Banner>
         )}
+
+        <div className="pt-2 space-y-3">
+          <p>
+            Delete removes the captioning server and the Google Cloud project the install created
+            {status?.project ? ` (${status.project})` : ""}. Google keeps a deleted project for 30 days if you change
+            your mind.
+          </p>
+          <a
+            href={DELETE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block bg-red-700 hover:bg-red-800 text-white font-semibold px-4 py-2.5 rounded-xl"
+          >
+            Delete from Google Cloud
+          </a>
+          <p>These stay, because the install did not create them:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              Your Soniox account, remaining credit and autopay.{" "}
+              <ExtLink href={SONIOX_ACCOUNT}>Delete the Soniox account</ExtLink>
+            </li>
+            <li>
+              Your Google billing account and card.{" "}
+              <ExtLink href={GOOGLE_BILLING}>Close the Google billing account</ExtLink> (pick the account, then Account
+              management → Close billing account). Only close it if you created it for captions and nothing else uses it.
+            </li>
+          </ul>
+        </div>
       </Details>
 
       <Spending status={status} />
