@@ -20,7 +20,8 @@ function rememberLang(code: string) {
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 const SIZES = [20, 24, 28, 34, 40, 48, 56];
-const POLL_MS = 30_000;
+/** How often a visible waiting page asks whether the sound desk is live. */
+const POLL_MS = 2_000;
 const GIVE_UP_MS = 2 * 60 * 60_000;
 const MAX_LINES = 500;
 
@@ -78,7 +79,7 @@ export default function ListenView() {
     };
   }, [backend]);
 
-  // Connection loop: check the server, connect while live, otherwise poll gently.
+  // Connection loop: while this tab is visible, check often and connect once the desk is live.
   useEffect(() => {
     if (!backend || !lang || choosing) return;
     let stopped = false;
@@ -103,9 +104,9 @@ export default function ListenView() {
     };
 
     const check = async () => {
-      if (stopped) return;
+      if (stopped || document.visibilityState !== "visible") return;
       const status = await getStatus();
-      if (stopped) return;
+      if (stopped || document.visibilityState !== "visible") return;
       if (status?.venue) setVenue(status.venue);
       if (status && !protocolSupported(status)) return setPhase("outdated");
       if (status?.live) return connect();
@@ -114,7 +115,7 @@ export default function ListenView() {
     };
 
     const connect = () => {
-      if (stopped || ws) return;
+      if (stopped || ws || document.visibilityState !== "visible") return;
       const socket = new WebSocket(wsUrl("/ws/listen", { lang }));
       ws = socket;
       socket.onopen = () => {
