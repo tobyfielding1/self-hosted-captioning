@@ -107,28 +107,29 @@ function Intro() {
     <>
       <h1 className="text-3xl font-bold text-midnight">Live captions</h1>
       <p className="text-lg">
-        People in the room read along on their phones, each in their own language. The sound desk runs it from a laptop.
-        Nothing to install.
+        Self-hosted captioning allows a venue to host a translation server on Google Cloud so the audience can read what is being spoken on their mobile devices in their own language. Self-hosting makes it extremely low cost for the venue.
       </p>
-      <Card title="In the room">
+      <Card title="Audience">
+        <p>If you are in the audience, ask the venue for the audience link or QR code to read along.</p>
+      </Card>
+      <Card title="Venue team">
         <p>
-          Open the sound desk bookmark, check the level bar moves when someone speaks, and press Start. Everyone else
+          Open your sound desk link, check the level bar moves when someone speaks, and press Start. Everyone else
           scans a QR code with their phone camera, picks a language, and reads.
         </p>
         <p>
-          The spoken language appears word by word. Translations appear as the words are spoken. Languages Soniox
-          doesn't offer come through Google Translate, a sentence at a time. The text can be made larger.
+          The words appear as they are spoken, in the language each person picked.
         </p>
-        <p>Press Stop at the end. Phones can follow only while the sound desk is live.</p>
+        <p>Press Stop at the end. Devices can follow only while the sound desk is live.</p>
       </Card>
       <Card title="Set up once">
-        <p className="text-lg">
-          About 15 minutes, on your Google account. Each venue gets its own server, a private sound desk link, and a QR
-          code that stays the same. The terminal lists any venues already on this account. The last line sets up another.
+        <p>
+          It takes about 15 minutes on your Google account. Each venue gets its own server, a private sound desk link, and a QR
+          code that stays the same. The terminal lists any venues already on this account.
         </p>
         <p>
           Google Cloud hosts the server. Normal use stays in the free tier, but Google still asks for a card,
-          and the install emails you if this venue passes £5 a month. Soniox is the part that costs money. You choose how
+          and the install emails you if this venue passes £5 a month. Transcripts and translations come from Soniox and Google Translate. Soniox is the part that costs money. You choose how
           much credit to add, and it is only used while someone is being captioned: quiet audio isn't sent, and a
           language runs only while someone is reading it. That costs less than a captioning service you subscribe to.
           See{" "}
@@ -141,15 +142,15 @@ function Intro() {
           href={INSTALL_URL}
           target="_blank"
           rel="noreferrer"
-          className="inline-block bg-purple hover:bg-midnight text-white text-2xl font-semibold px-8 py-5 rounded-2xl"
+          className="inline-block bg-purple hover:bg-midnight text-white text-lg font-semibold px-8 py-5 rounded-2xl"
         >
           Set up live captions
         </a>
-        <p className="text-sm text-gray-600">
+        <p className="text-gray-600">
           If you end up in a blank terminal, click Set up live captions again.
         </p>
-        <p className="text-sm text-gray-600">
-          Already set up? Open the sound desk bookmark. Lost that link? Click the setup link again and pick that venue to get the link again.
+        <p className="text-gray-600">
+          Already set up? Open your sound desk link. Lost it? Click the setup link again, select the existing venue and it will be displayed.
         </p>
       </Card>
     </>
