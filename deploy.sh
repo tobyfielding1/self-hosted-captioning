@@ -87,8 +87,11 @@ trap 'fail "Something went wrong while ${STEP}." "Copy the text above and send i
 # --------------------------------------------------------------------------- project
 STEP="finding your Google Cloud project"
 bold "Setting up live captions"
+spin "Checking your Google account"
 ACCOUNT="$(gcloud config get-value account 2>>"$LOG" || true)"
+spin_stop
 [ -n "$ACCOUNT" ] || fail "You're not signed in to Google Cloud." "Open this page from the venue Google account: https://shell.cloud.google.com"
+note "Signed in as ${ACCOUNT}"
 
 # Google Cloud project names are 4–30 characters: letters, numbers, spaces, hyphens, apostrophes, exclamation marks.
 ask_venue_name() {
