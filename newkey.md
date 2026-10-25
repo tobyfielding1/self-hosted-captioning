@@ -7,7 +7,7 @@ Use this if the Soniox key was shared with someone who shouldn't have it, or Son
 Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the venue Google account.
 
 ```bash
-./deploy.sh --new-key
+./setup.sh --new-key
 ```
 
 When it asks, create a key at [API keys](https://console.soniox.com/org/projects/api/keys), paste it, and press **Enter**. Nothing appears while you paste. That's normal.

@@ -11,7 +11,7 @@ Click **Start**. The next page has one command to copy into the terminal.
 Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**.
 
 ```bash
-./deploy.sh
+./setup.sh
 ```
 
 The terminal lists any venues already on this account. Pick one to use it again, or the last line to set up another. A new one asks what to call it. Press Enter to keep the name Live captions, then which billing account to use.

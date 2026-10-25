@@ -3,12 +3,12 @@
 # Safe to run again at any time. Normally run from Cloud Shell via the captions website's
 # "Install on Google Cloud" button.
 #
-#   ./deploy.sh                 install, or re-check an existing install. The last line sets up another venue.
-#   ./deploy.sh --new-project   skip the venue list and set up another one
-#   ./deploy.sh --new-key       replace the Soniox key
-#   ./deploy.sh --rotate-token  issue a new sound desk link (the old one stops working)
-#   ./deploy.sh --reselect      support use: pick the Cloud Run region again
-#   REGION=europe-west2 ./deploy.sh   support use: force a region
+#   ./setup.sh                 install, or re-check an existing install. The last line sets up another venue.
+#   ./setup.sh --new-project   skip the venue list and set up another one
+#   ./setup.sh --new-key       replace the Soniox key
+#   ./setup.sh --rotate-token  issue a new sound desk link (the old one stops working)
+#   ./setup.sh --reselect      support use: pick the Cloud Run region again
+#   REGION=europe-west2 ./setup.sh   support use: force a region
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -78,7 +78,7 @@ fail() {
   printf '\n\033[1;31m%s\033[0m\n' "$1"
   [ -n "${2:-}" ] && printf '%s\n' "$2"
   printf '\nDetails for your helper are saved in %s\n' "$LOG"
-  printf '\nWhen that is fixed, run this again:  ./deploy.sh\n\n'
+  printf '\nWhen that is fixed, run this again:  ./setup.sh\n\n'
   exit 1
 }
 STEP="starting"
@@ -504,7 +504,7 @@ if $ASK_KEY; then
     fi
     TRIES=$((TRIES + 1))
     [ "$TRIES" -lt 5 ] || fail "Soniox didn't accept that key." \
-      "Copy the key again from https://console.soniox.com (API keys), check the account has credit, then run: ./deploy.sh --new-key"
+      "Copy the key again from https://console.soniox.com (API keys), check the account has credit, then run: ./setup.sh --new-key"
     note "Soniox didn't accept that key. Copy it again from \"API keys\" and check the account has credit, then paste it here."
   done
 fi

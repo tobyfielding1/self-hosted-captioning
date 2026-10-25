@@ -9,7 +9,7 @@ The same billing account is fine, and the same Soniox account is fine. When it a
 Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the venue Google account.
 
 ```bash
-./deploy.sh
+./setup.sh
 ```
 
 When the terminal says **Done!**, open the new link it prints and bookmark it on its own. You can open it in this same browser. The first venue's link still belongs to the first venue.
