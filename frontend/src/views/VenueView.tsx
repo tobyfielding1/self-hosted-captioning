@@ -146,6 +146,9 @@ function Intro() {
           Set up live captions
         </a>
         <p className="text-sm text-gray-600">
+          If you end up in a blank terminal, click Set up live captions again.
+        </p>
+        <p className="text-sm text-gray-600">
           Already set up? Open the sound desk bookmark. Lost that link? Run the install again and pick that venue.
         </p>
       </Card>
