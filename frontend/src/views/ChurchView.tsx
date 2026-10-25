@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { checkDeskAccess, getBackend, getStatus, getToken, isSetupPage, listenerLink, protocolSupported, setupUrl, siteRoot, speakLink, type DeskAccess, type Status } from "../backend";
+import { checkDeskAccess, getBackend, getStatus, getToken, listenerLink, protocolSupported, siteRoot, speakLink, type DeskAccess, type Status } from "../backend";
 import { Banner, Button, Card, copyText, Details } from "../ui";
 import SpeakView from "./SpeakView";
 
@@ -21,7 +21,7 @@ const SONIOX_KEYS = "https://console.soniox.com/org/projects/api/keys";
 const MIN_NODE_MAJOR = 24;
 const TIP_DISMISSED = "captioning.fasterTipDismissed";
 
-/** The venue team's page: an intro, the setup wizard at /setup, or the sound desk when the address is a sound desk link. */
+/** The venue team's page: an intro, or the sound desk when the address is a sound desk link. */
 export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
   const backend = getBackend();
   const token = getToken();
@@ -75,8 +75,6 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
             )}
           />
         </>
-      ) : isSetupPage() ? (
-        <Wizard />
       ) : (
         <Intro />
       )}
@@ -126,113 +124,31 @@ function Intro() {
       <Card title="Set up once">
         <p className="text-lg">
           About 15 minutes, on your Google account. Each venue gets its own server, a private sound desk link, and a QR
-          code that stays the same.
+          code that stays the same. The terminal lists any venues already on this account. The last line sets up another.
         </p>
         <p>
-          The server fits in Google Cloud's free tier for normal use. Soniox turns speech into captions and
-          translations, and charges for speech that is actually captioned: quiet audio isn't sent, and a language runs
-          only while someone is reading it. See{" "}
+          Google Cloud hosts the server. A normal service stays in the free tier, but Google still asks for a card,
+          and the install emails you if this venue passes 5 a month. Soniox is the part that costs money. You choose how
+          much credit to add, and it is only used while someone is being captioned: quiet audio isn't sent, and a
+          language runs only while someone is reading it. That costs less than a captioning service you subscribe to.
+          See{" "}
           <a className="underline" href="https://soniox.com/pricing" target="_blank" rel="noreferrer">
             Soniox pricing
           </a>
           .
         </p>
         <a
-          href={setupUrl()}
+          href={INSTALL_URL}
+          target="_blank"
+          rel="noreferrer"
           className="inline-block bg-blue-700 hover:bg-blue-800 text-white text-2xl font-semibold px-8 py-5 rounded-2xl"
         >
           Set up live captions
         </a>
         <p className="text-sm text-gray-600">
-          Already set up? Open the sound desk bookmark. Lost that link? The setup page prints it again.
+          Already set up? Open the sound desk bookmark. Lost that link? Run the install again and pick that venue.
         </p>
       </Card>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------- wizard
-
-function Wizard() {
-  const [step, setStep] = useState(1);
-
-  return (
-    <>
-      <h1 className="text-3xl font-bold">Set up live captions</h1>
-      <p className="text-lg text-gray-700">Two steps, about 15 minutes, done once.</p>
-      <ol className="flex gap-2" aria-label="Progress">
-        {[1, 2].map((n) => (
-          <li key={n} className={`flex-1 h-2 rounded-full ${n <= step ? "bg-blue-700" : "bg-gray-200"}`} aria-current={n === step} />
-        ))}
-      </ol>
-
-      {step === 1 && (
-        <Card title="Step 1 of 2: Make sure you have Google Cloud billing">
-          <p className="text-lg">
-            Sign in with your Google account and add a card. You won't be charged for normal use: the captioning
-            server fits in Google's free tier.
-          </p>
-          <a
-            className="inline-block underline text-blue-800 text-lg"
-            href="https://console.cloud.google.com/billing/create"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open Google Cloud billing
-          </a>
-          <p className="text-gray-600">Already have billing set up? Just carry on.</p>
-          <Button onClick={() => setStep(2)}>Billing is set up</Button>
-        </Card>
-      )}
-
-      {step === 2 && (
-        <Card title='Step 2 of 2: Click "Install on Google Cloud"'>
-          <p className="text-lg">
-            A Google page opens with instructions on the right. Start the install there. It asks what to call this
-            venue. Press Enter to keep the name Live captions. While Google Cloud sets up, it walks you through creating
-            a Soniox account (Soniox turns speech into captions and translations) and asks you to paste a key.
-          </p>
-          <p className="text-gray-600">
-            See{" "}
-            <a className="underline" href="https://soniox.com/pricing" target="_blank" rel="noreferrer">
-              Soniox pricing
-            </a>{" "}
-            for what captions cost per hour.
-          </p>
-          <a
-            href={INSTALL_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block bg-blue-700 hover:bg-blue-800 text-white text-2xl font-semibold px-8 py-5 rounded-2xl"
-          >
-            Install on Google Cloud
-          </a>
-          <p className="text-lg">
-            When it says <strong>Done!</strong>, open the link it prints. That page is the sound desk, with the QR code and the links to share.
-          </p>
-          <p className="text-sm text-gray-600">
-            Already installed but lost the link? Click Install on Google Cloud again. One venue prints that link. Several
-            venues: the terminal lists them by name and asks which one.
-          </p>
-          <div className="border-t border-gray-200 pt-3 space-y-2">
-            <p className="text-sm text-gray-600">
-              A second session at the same time needs its own server. The same Google billing account and Soniox account are
-              fine. A new Soniox key is recommended. The terminal asks what to call this venue.
-            </p>
-            <a
-              href={ANOTHER_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-block bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50"
-            >
-              Set up another venue
-            </a>
-          </div>
-          <Button variant="secondary" onClick={() => setStep(1)}>
-            Back
-          </Button>
-        </Card>
-      )}
     </>
   );
 }
@@ -471,11 +387,12 @@ function Delete({ status }: { status: Status | null | undefined }) {
       </Button>
       <h3 className="font-semibold pt-3">Set up another venue</h3>
       <p>
-        Opens the setup page, for a second session at the same time on this Google account. This venue's link and QR code
-        stay the same. The same Google billing account and Soniox account are fine. A new Soniox key is recommended.
+        Opens the install in Google Cloud, for a second session at the same time. This venue's link and QR code stay the
+        same. The same billing account and Soniox account are fine. A new Soniox key is recommended. The terminal lists
+        your venues. The last line sets up another.
       </p>
       <a
-        href={setupUrl()}
+        href={ANOTHER_URL}
         target="_blank"
         rel="noreferrer"
         className="inline-block bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50"

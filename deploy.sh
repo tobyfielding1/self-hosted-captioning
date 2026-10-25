@@ -3,8 +3,8 @@
 # Safe to run again at any time. Normally run from Cloud Shell via the captions website's
 # "Install on Google Cloud" button.
 #
-#   ./deploy.sh                 install, or re-check an existing install
-#   ./deploy.sh --new-project   another venue on this same Google account
+#   ./deploy.sh                 install, or re-check an existing install. The last line sets up another venue.
+#   ./deploy.sh --new-project   skip the venue list and set up another one
 #   ./deploy.sh --new-key       replace the Soniox key
 #   ./deploy.sh --rotate-token  issue a new sound desk link (the old one stops working)
 #   ./deploy.sh --reselect      support use: pick the Cloud Run region again
@@ -108,11 +108,6 @@ ask_venue_name() {
   done
 }
 create_project() {
-  if [ "${#NAMES[@]}" -gt 0 ]; then
-    note "This account already has:"
-    local existing
-    for existing in "${NAMES[@]}"; do note "  • ${existing}"; done
-  fi
   ask_venue_name
   local display="$VENUE_NAME"
   DISPLAY="$display"
@@ -122,6 +117,56 @@ create_project() {
   gcloud projects create "$PROJECT" --name="$display" --labels="$LABEL" --quiet >/dev/null 2>>"$LOG" ||
     fail "Google wouldn't let this account create a new project." \
       "This usually means the account has reached its project limit or belongs to an organisation that restricts projects. Ask your helper, or try a different Google account."
+}
+# A new venue picks a billing account first, then the project is created and that account is attached.
+start_new_venue() {
+  if [ "${#NAMES[@]}" -gt 0 ]; then
+    note "The same billing account and Soniox account are fine. A new Soniox key is recommended."
+  fi
+  choose_billing
+  create_project
+}
+load_billing_accounts() {
+  mapfile -t ACCOUNTS < <(gcloud billing accounts list --filter=open=true --format='value(name.basename(),displayName)' 2>>"$LOG" || true)
+}
+# Sets BILLING. Creating an account happens on Google's page; this waits and lists again.
+choose_billing() {
+  local n extra i name
+  while true; do
+    STEP="checking billing"
+    spin "Checking billing"
+    load_billing_accounts
+    spin_stop
+    n="${#ACCOUNTS[@]}"
+    extra=$((n + 1))
+    if [ "$n" -eq 0 ]; then
+      note "This Google account has no billing account yet."
+      note "Google Cloud needs one before it will host anything, even on the free tier."
+      note "Open https://console.cloud.google.com/billing/create and add a card."
+      note "A normal service stays in the free tier. The install emails you if this venue passes 5 a month."
+      note "When that is done, press Enter."
+      read -rp "   Press Enter: " _
+      continue
+    fi
+    bold "Which billing account should this venue use?"
+    for i in "${!ACCOUNTS[@]}"; do
+      name="$(cut -f2 <<<"${ACCOUNTS[$i]}")"
+      [ -n "$name" ] || name="$(cut -f1 <<<"${ACCOUNTS[$i]}")"
+      printf '  %d) %s\n' "$((i + 1))" "$name"
+    done
+    printf '  %d) None of these. Create a new billing account.\n' "$extra"
+    read -rp "   Number: " CHOICE
+    if [ "$CHOICE" = "$extra" ]; then
+      note "Open https://console.cloud.google.com/billing/create and add a card."
+      note "A normal service stays in the free tier. The install emails you if this venue passes 5 a month."
+      note "When that is done, press Enter."
+      read -rp "   Press Enter: " _
+      continue
+    fi
+    [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "$n" ] || fail "That wasn't one of the numbers."
+    BILLING="$(cut -f1 <<<"${ACCOUNTS[$((CHOICE - 1))]}")"
+    return 0
+  done
 }
 load_projects() {
   PROJECTS=()
@@ -153,42 +198,48 @@ project_choices() {
   if $dup; then spin_stop; fi
 }
 
+BILLING=""
+spin "Looking for your captions project"
+load_projects
+spin_stop
 if $NEW_PROJECT; then
-  spin "Looking for your captions project"
-  load_projects
-  spin_stop
-  create_project
-else
-  spin "Looking for your captions project"
-  load_projects
+  start_new_venue
+elif $ROTATE || $NEW_KEY; then
   if [ "${#PROJECTS[@]}" -eq 0 ]; then
-    spin_stop
-    if $ROTATE; then
-      fail "There's no captioning server on this Google account." "Install first, or sign in as the venue Google account that did."
-    fi
-    create_project
+    fail "There's no captioning server on this Google account." "Install first, or sign in as the venue Google account that did."
   elif [ "${#PROJECTS[@]}" -eq 1 ]; then
-    spin_stop
     PROJECT="${PROJECTS[0]}"
     DISPLAY="${NAMES[0]}"
   else
     project_choices
     bold "This Google account has more than one venue."
     for i in "${!PROJECTS[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${LINES[$i]}"; done
-    if $ROTATE || $NEW_KEY; then
-      note "Type the number of the one you want."
-      read -rp "   Number: " CHOICE
-    else
-      note "Type the number of the one you want, or type new for another venue."
-      read -rp "   Choice: " CHOICE
-    fi
-    if [ "$CHOICE" = new ] && ! $ROTATE && ! $NEW_KEY; then
-      create_project
-    else
-      [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#PROJECTS[@]}" ] || fail "That wasn't one of the choices."
-      PROJECT="${PROJECTS[$((CHOICE - 1))]}"
-      DISPLAY="${NAMES[$((CHOICE - 1))]}"
-    fi
+    note "Type the number of the one you want."
+    read -rp "   Number: " CHOICE
+    [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#PROJECTS[@]}" ] || fail "That wasn't one of the numbers."
+    PROJECT="${PROJECTS[$((CHOICE - 1))]}"
+    DISPLAY="${NAMES[$((CHOICE - 1))]}"
+  fi
+elif [ "${#PROJECTS[@]}" -eq 0 ]; then
+  start_new_venue
+else
+  project_choices
+  if [ "${#PROJECTS[@]}" -eq 1 ]; then
+    bold "This Google account already has a venue."
+  else
+    bold "This Google account has more than one venue."
+  fi
+  for i in "${!PROJECTS[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${LINES[$i]}"; done
+  extra=$(( ${#PROJECTS[@]} + 1 ))
+  printf '  %d) None of these. Set up another venue.\n' "$extra"
+  note "Type a number and press Enter."
+  read -rp "   Number: " CHOICE
+  if [ "$CHOICE" = "$extra" ]; then
+    start_new_venue
+  else
+    [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#PROJECTS[@]}" ] || fail "That wasn't one of the numbers."
+    PROJECT="${PROJECTS[$((CHOICE - 1))]}"
+    DISPLAY="${NAMES[$((CHOICE - 1))]}"
   fi
 fi
 note "Project: ${DISPLAY} (${PROJECT})"
@@ -197,26 +248,21 @@ spin "Preparing ${DISPLAY}"
 gcloud config set project "$PROJECT" >/dev/null 2>>"$LOG"
 
 # --------------------------------------------------------------------------- billing
+# A venue that already pays for captions keeps that billing account.
 STEP="checking billing"
 spin "Checking billing"
-BILLING="$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName)' 2>>"$LOG" || true)"
-BILLING="${BILLING#billingAccounts/}"
-if [ -z "$BILLING" ]; then
-  mapfile -t ACCOUNTS < <(gcloud billing accounts list --filter=open=true --format='value(name.basename(),displayName)' 2>>"$LOG" || true)
-  if [ "${#ACCOUNTS[@]}" -eq 0 ]; then
-    fail "Billing isn't set up on this Google account." \
-      "Open https://console.cloud.google.com/billing/create, add a card (normal use stays within the free tier), then run this again."
-  elif [ "${#ACCOUNTS[@]}" -eq 1 ]; then
-    BILLING="$(cut -f1 <<<"${ACCOUNTS[0]}")"
-  else
-    bold "Which billing account should pay for captions?"
-    for i in "${!ACCOUNTS[@]}"; do printf '  %d) %s\n' "$((i + 1))" "$(cut -f2 <<<"${ACCOUNTS[$i]}")"; done
-    read -rp "Type a number and press Enter: " CHOICE
-    [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#ACCOUNTS[@]}" ] || fail "That wasn't one of the numbers."
-    BILLING="$(cut -f1 <<<"${ACCOUNTS[$((CHOICE - 1))]}")"
-  fi
+linked="$(gcloud billing projects describe "$PROJECT" --format='value(billingAccountName)' 2>>"$LOG" || true)"
+linked="${linked#billingAccounts/}"
+spin_stop
+if [ -n "$linked" ]; then
+  BILLING="$linked"
+else
+  [ -n "$BILLING" ] || choose_billing
+  STEP="connecting billing"
+  spin "Connecting billing"
   gcloud billing projects link "$PROJECT" --billing-account="$BILLING" >/dev/null 2>>"$LOG" ||
     fail "Couldn't connect billing to the project." "Make sure this Google account can manage billing account ${BILLING}, then run this again."
+  spin_stop
 fi
 note "Billing: connected"
 
@@ -381,11 +427,14 @@ fi
 
 if $ASK_KEY; then
   bold "Now get a Soniox key. Google Cloud carries on setting up while you do."
-  note "Soniox turns speech into captions and translations."
+  note "Soniox turns speech into captions. This is the part that costs money."
+  note "You choose how much credit to add, and it is only used while someone is being captioned."
+  note "That costs less than a captioning service you subscribe to."
   note ""
   note "1. Open https://console.soniox.com and sign up, or sign in."
-  note "2. Add some credit under Billing (prices: https://soniox.com/pricing)."
-  note "   Tip: also turn on \"Enable autopay\" there, so captions never stop because the credit ran out."
+  note "2. Add a small amount of credit under Billing (prices: https://soniox.com/pricing)."
+  note "   Quiet audio isn't sent, and a language runs only while someone is reading it."
+  note "   Autopay is optional. It tops up by an amount you set, so a long service doesn't stop when the credit runs out."
   note "3. Click \"API keys\", then \"Create API key\", and copy it."
   note "4. Come back here, paste it below and press Enter."
   TRIES=0

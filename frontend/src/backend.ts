@@ -87,21 +87,6 @@ export function siteRoot(): string {
   return `${location.origin}${import.meta.env.BASE_URL}`;
 }
 
-/** The install wizard. A second venue starts here; a new venue reads the intro first. */
-export function setupUrl(): string {
-  return `${siteRoot()}setup/`;
-}
-
-/** Path under the site root, with no leading or trailing slash. */
-export function sitePath(url = location.href): string {
-  const path = new URL(url, location.origin).pathname;
-  const base = import.meta.env.BASE_URL;
-  const rest = path.startsWith(base) ? path.slice(base.length) : path.replace(/^\//, "");
-  return rest.replace(/\/+$/, "").replace(/\.html$/, "");
-}
-
-export const isSetupPage = () => sitePath() === "setup";
-
 export function listenerLink(backend = getBackend()): string {
   return `${siteRoot()}?backend=${encodeURIComponent(backend ?? "")}`;
 }

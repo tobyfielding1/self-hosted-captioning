@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { getBackend, getLanguages, getStatus, ORIGINAL, protocolSupported, setupUrl, wsUrl, type Languages } from "../backend";
+import { getBackend, getLanguages, getStatus, ORIGINAL, protocolSupported, siteRoot, wsUrl, type Languages } from "../backend";
 import { label, orderLanguages } from "../lib/languages";
 import { useWakeLock } from "../lib/wakeLock";
 
@@ -211,7 +211,7 @@ export default function ListenView() {
         <div className="max-w-xl mx-auto p-6 space-y-6">
           <h1 className="text-3xl font-bold">Live captions</h1>
           <p className="text-2xl">To follow live captions, scan the QR code at your venue with your phone camera.</p>
-          <a href={setupUrl()} className="inline-block text-base text-gray-500 underline">
+          <a href={siteRoot()} className="inline-block text-base text-gray-500 underline">
             Setting up captions for your venue?
           </a>
         </div>

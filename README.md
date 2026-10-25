@@ -3,8 +3,7 @@
 Live captions and translation for venues. Each venue runs its own tiny
 backend on its own Google Cloud free tier; the web app is hosted on GitHub Pages.
 
-- **Intro:** https://tobyfielding1.github.io/self-hosted-captioning/ explains it. Share this with another venue.
-- **Setup:** https://tobyfielding1.github.io/self-hosted-captioning/setup/ is the install. A second venue starts here.
+- **Intro:** https://tobyfielding1.github.io/self-hosted-captioning/ explains it and starts the install. Share this with another venue.
 - **Sound desk:** open the sound desk link, check the bar moves, press Start.
 - **Audience:** scan the QR code, pick a language, read.
 

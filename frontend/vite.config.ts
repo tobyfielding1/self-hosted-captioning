@@ -5,7 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
-/** GitHub Pages has no SPA fallback. `/setup/` needs its own index. */
+/** GitHub Pages has no SPA fallback. `/setup/` keeps serving this page so an old link still opens the intro. */
 function setupPage(): Plugin {
   return {
     name: "setup-page",

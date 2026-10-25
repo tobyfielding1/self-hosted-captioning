@@ -2,7 +2,7 @@
 
 ## Before you start
 
-This puts live captions on your Google account. It takes about 15 minutes. You need a card on Google Cloud billing. Later pages walk you through a Soniox account, which turns speech into captions.
+This puts live captions on your Google account. It takes about 15 minutes. Google Cloud hosts the server. A normal service stays in the free tier, but Google still asks for a card, and the install emails you if this venue passes 5 a month. Soniox turns the speech into captions. You choose how much credit to add, and it is only used while someone is being captioned. That is the part that costs money, and it costs less than a captioning service you subscribe to.
 
 Click **Start**. The next page has one command to copy into the terminal.
 
@@ -14,22 +14,20 @@ Click the **copy** button on the box below (it pastes into the terminal at the b
 ./deploy.sh
 ```
 
-The terminal asks what to call this venue. Press Enter to keep the name Live captions.
+The terminal lists any venues already on this account. Pick one to use it again, or the last line to set up another. A new one asks what to call it. Press Enter to keep the name Live captions, then which billing account to use.
 
 Google Cloud then sets itself up, which takes a few minutes. You don't need to wait: click **Next** and get your Soniox key while it works.
 
-If this Google account already has more than one venue, the terminal lists them by name and asks which one you mean.
-
 ## Get your Soniox key while it works
 
-Soniox turns speech into captions and translations.
+Soniox turns speech into captions and translations. This is the part that costs money. You choose how much credit to add, and it is only used while someone is being captioned.
 
 1. Open [console.soniox.com](https://console.soniox.com) and sign up, or sign in.
-2. Add some credit under Billing. See [Soniox pricing](https://soniox.com/pricing). We recommend also turning on **Enable autopay** there, which tops up from your card when the credit runs low, so captions never stop mid-service.
+2. Add a small amount of credit under Billing. You choose how much. Quiet audio isn't sent, and a language runs only while someone is reading it. That costs less than a captioning service you subscribe to. See [Soniox pricing](https://soniox.com/pricing). Autopay is optional. It tops up by an amount you set, so a long service doesn't stop when the credit runs out.
 3. Click **API keys**, then **Create API key**, and copy it.
 4. Come back to the terminal, paste the key and press **Enter**. Nothing appears while you paste. That's normal.
 
-If the terminal has closed or disconnected in the meantime, click **Install on Google Cloud** on the captions website again. It carries on where it left off.
+If the terminal has closed or disconnected in the meantime, click **Set up live captions** on the captions website again. It carries on where it left off.
 
 ## Finish
 

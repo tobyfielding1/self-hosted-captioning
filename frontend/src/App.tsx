@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getBackend, getToken, isAudience, isSetupPage, shouldOpenShare } from "./backend";
+import { getBackend, getToken, isAudience, shouldOpenShare } from "./backend";
 import ChurchView from "./views/ChurchView";
 import ListenView from "./views/ListenView";
 
@@ -20,7 +20,7 @@ export default function App() {
 
   useEffect(() => {
     const desk = !listen && !!getBackend() && !!getToken();
-    document.title = listen ? "Live captions" : desk ? "Captions" : isSetupPage() ? "Set up live captions" : "Live captions";
+    document.title = listen ? "Live captions" : desk ? "Captions" : "Live captions";
     if (!listen) document.documentElement.classList.remove("dark");
   }, [listen, href]);
 
