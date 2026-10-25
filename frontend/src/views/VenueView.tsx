@@ -92,7 +92,7 @@ function DeskGate({ access }: { access: "checking" | "down" | "bad" }) {
     );
   }
   return (
-    <p className="text-lg text-gray-700">
+    <p className="text-lg">
       {access === "down"
         ? "The captioning server isn't answering yet, so this link can't be checked. Trying again."
         : "Checking this sound desk link..."}
@@ -106,7 +106,7 @@ function Intro() {
   return (
     <>
       <h1 className="text-3xl font-bold text-midnight">Live captions</h1>
-      <p className="text-lg text-gray-700">
+      <p className="text-lg">
         People in the room read along on their phones, each in their own language. The sound desk runs it from a laptop.
         Nothing to install.
       </p>
@@ -132,7 +132,7 @@ function Intro() {
           much credit to add, and it is only used while someone is being captioned: quiet audio isn't sent, and a
           language runs only while someone is reading it. That costs less than a captioning service you subscribe to.
           See{" "}
-          <a className="underline" href="https://soniox.com/pricing" target="_blank" rel="noreferrer">
+          <a className="underline text-blue-600 hover:text-blue-800" href="https://soniox.com/pricing" target="_blank" rel="noreferrer">
             Soniox pricing
           </a>
           .
@@ -206,7 +206,7 @@ function Finished({
     <>
       <div className="space-y-4">
       <Details summary="Share" open={open}>
-        <h3 className="font-semibold">Sound desk link</h3>
+        <h3 className="font-semibold text-midnight">Sound desk link</h3>
         <p>This page is the sound desk link. Bookmark it as "Captions" and keep it private.</p>
         <p className="text-sm break-all text-gray-600">{speak}</p>
         <div className="flex flex-wrap gap-3">
@@ -216,7 +216,7 @@ function Finished({
           </a>
         </div>
 
-        <h3 className="font-semibold pt-3">QR code for the audience</h3>
+        <h3 className="font-semibold text-midnight pt-3">QR code for the audience</h3>
         <p>People scan this with their phone camera to follow along. It never changes, even after updates.</p>
         <canvas ref={canvas} className="rounded-lg border border-gray-200" />
         <div className="flex flex-wrap gap-3">
@@ -225,7 +225,7 @@ function Finished({
             {copied === "listen" ? "Copied" : "Copy audience link"}
           </Button>
         </div>
-        <a className="inline-block underline text-purple" href={listen} target="_blank" rel="noreferrer">
+        <a className="inline-block underline text-blue-600 hover:text-blue-800" href={listen} target="_blank" rel="noreferrer">
           Open the audience view
         </a>
       </Details>
@@ -253,7 +253,7 @@ function Notices({ status }: { status: Status | null | undefined }) {
       {needsReinstall && (
         <Banner tone="warn">
           The captioning server needs a one-time update. Click{" "}
-          <a className="underline" href={INSTALL_URL} target="_blank" rel="noreferrer">
+          <a className="underline text-blue-600 hover:text-blue-800" href={INSTALL_URL} target="_blank" rel="noreferrer">
             Install on Google Cloud
           </a>{" "}
           again and click Run. Your links and QR code stay the same.
@@ -267,11 +267,11 @@ function Notices({ status }: { status: Status | null | undefined }) {
             setTipDismissed(true);
           }}
         >
-          <p className="font-semibold">Captions can be faster (optional)</p>
+          <p className="font-semibold text-midnight">Captions can be faster (optional)</p>
           <p>
             Your venue is closer to Soniox's {status.sonioxFasterRegion.toUpperCase()} region. At console.soniox.com,
             request access to that region, create a project in it, and make an API key there. Then{" "}
-            <a className="underline" href={NEWKEY_URL} target="_blank" rel="noreferrer">
+            <a className="underline text-blue-600 hover:text-blue-800" href={NEWKEY_URL} target="_blank" rel="noreferrer">
               rotate the Soniox key
             </a>{" "}
             and paste that key when asked.
@@ -284,7 +284,7 @@ function Notices({ status }: { status: Status | null | undefined }) {
 
 function ExtLink({ href, children }: { href: string; children: string }) {
   return (
-    <a className="underline text-purple" href={href} target="_blank" rel="noreferrer">
+    <a className="underline text-blue-600 hover:text-blue-800" href={href} target="_blank" rel="noreferrer">
       {children}
     </a>
   );
@@ -349,7 +349,7 @@ function Spending({ status }: { status: Status | null | undefined }) {
             </li>
           </ul>
         ) : (
-          <p className="text-gray-600">
+          <p>
             {status === undefined
               ? "Checking which Google Cloud project this server is in."
               : "The Google Cloud links appear once the captioning server reports its project."}
@@ -372,12 +372,12 @@ function Delete({ status }: { status: Status | null | undefined }) {
   const project = status?.project;
   return (
     <div className="space-y-3 pt-2">
-      <h3 className="font-semibold">Rotate the sound desk link</h3>
+      <h3 className="font-semibold text-midnight">Rotate the sound desk link</h3>
       <p>If the sound desk link was shared with someone who shouldn't have it, issue a new one. The old link stops working. The QR code stays the same. This page closes so the old link is not left open here.</p>
       <Button variant="secondary" onClick={startNewDeskLink}>
         Rotate sound desk link
       </Button>
-      <h3 className="font-semibold pt-3">Rotate the Soniox key</h3>
+      <h3 className="font-semibold text-midnight pt-3">Rotate the Soniox key</h3>
       <p>
         If the Soniox key got out, or Soniox has stopped accepting it, put a new one on the server. The sound desk link
         and QR code stay the same. When it finishes, <ExtLink href={SONIOX_KEYS}>delete the old key</ExtLink>.
@@ -385,7 +385,7 @@ function Delete({ status }: { status: Status | null | undefined }) {
       <Button variant="secondary" onClick={() => window.open(NEWKEY_URL, "_blank", "noopener")}>
         Rotate Soniox key
       </Button>
-      <h3 className="font-semibold pt-3">Set up another venue</h3>
+      <h3 className="font-semibold text-midnight pt-3">Set up another venue</h3>
       <p>
         Opens the install in Google Cloud, for a second session at the same time. This venue's link and QR code stay the
         same. The same billing account and Soniox account are fine. A new Soniox key is recommended. The terminal lists
@@ -399,7 +399,7 @@ function Delete({ status }: { status: Status | null | undefined }) {
       >
         Set up another venue
       </a>
-      <h3 className="font-semibold pt-3">Delete</h3>
+      <h3 className="font-semibold text-midnight pt-3">Delete</h3>
       <p>
         Delete removes the captioning server and the Google Cloud project the install created
         {project ? ` (${project})` : ""}. Google keeps a deleted project for 30 days if you change your mind.

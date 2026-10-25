@@ -6,7 +6,7 @@ const VARIANTS: Record<Variant, string> = {
   primary: "bg-purple text-white hover:bg-midnight disabled:opacity-40",
   danger: "bg-red-700 text-white hover:bg-red-800",
   secondary: "bg-white text-midnight border-2 border-purple/30 hover:bg-veil",
-  ghost: "text-purple underline underline-offset-2 hover:text-midnight",
+  ghost: "text-blue-600 underline underline-offset-2 hover:text-blue-800",
 };
 
 export function Button({
@@ -26,7 +26,7 @@ export function Button({
 
 export function Banner({ tone = "info", children, onClose }: { tone?: "info" | "warn" | "error" | "ok"; children: ReactNode; onClose?: () => void }) {
   const tones = {
-    info: "bg-white border-purple text-midnight",
+    info: "bg-white border-purple text-charcoal",
     warn: "bg-amber-50 border-amber-400 text-amber-950",
     error: "bg-red-50 border-red-400 text-red-950",
     ok: "bg-green-50 border-green-400 text-green-950",
@@ -55,7 +55,7 @@ export function Card({ title, children }: { title?: ReactNode; children: ReactNo
 export function Details({ summary, open, children }: { summary: string; open?: boolean; children: ReactNode }) {
   return (
     <details open={open} className="bg-white rounded-2xl border border-purple/30 p-4 group">
-      <summary className="cursor-pointer font-semibold select-none">{summary}</summary>
+      <summary className="cursor-pointer font-semibold text-midnight select-none">{summary}</summary>
       <div className="pt-3 space-y-3">{children}</div>
     </details>
   );

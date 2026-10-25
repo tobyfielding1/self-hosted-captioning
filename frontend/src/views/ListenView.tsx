@@ -240,13 +240,13 @@ export default function ListenView() {
           <button
             type="button"
             onClick={backToLanguages}
-            className="block w-full truncate px-5 pt-3 text-left text-lg font-semibold hover:underline"
+            className="block w-full truncate px-5 pt-3 text-left text-lg font-semibold text-midnight hover:underline"
           >
             {venue}
           </button>
         )}
         <div className="flex items-center gap-2 px-3 py-2">
-          <p className="min-w-0 flex-1 truncate px-2 text-lg font-semibold">
+          <p className="min-w-0 flex-1 truncate px-2 text-lg font-semibold text-midnight">
             {label(lang!, languages?.targets.find((t) => t.code === lang)?.name)}
           </p>
           {phase === "reconnecting" && <span className="text-sm text-amber-700 dark:text-amber-400">Reconnecting...</span>}
@@ -285,7 +285,7 @@ export default function ListenView() {
         {notice && <p className="mt-4 text-base text-amber-700 dark:text-amber-400">{notice}</p>}
         {message && <p className={`mt-6 ${empty ? "" : "text-base"} text-gray-500`}>{message}</p>}
         {(phase === "ended" || phase === "gave-up") && (
-          <button onClick={() => setAttempt((a) => a + 1)} className="mt-4 text-base underline text-purple dark:text-veil">
+          <button onClick={() => setAttempt((a) => a + 1)} className="mt-4 text-base underline text-blue-600 hover:text-blue-800 dark:text-blue-300">
             Check again
           </button>
         )}
@@ -308,7 +308,7 @@ export default function ListenView() {
 }
 
 function Shell({ dark, children }: { dark: boolean; children: React.ReactNode }) {
-  return <div className={`h-full flex flex-col ${dark ? "bg-midnight text-white" : "bg-white text-midnight"}`}>{children}</div>;
+  return <div className={`h-full flex flex-col ${dark ? "bg-midnight text-white" : "bg-white text-charcoal"}`}>{children}</div>;
 }
 
 function IconButton({ label: text, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
@@ -372,7 +372,7 @@ function LanguageChooser({
     <Shell dark={dark}>
       <div className="max-w-xl w-full mx-auto flex flex-col h-full p-4 gap-3">
         {venue && <p className="text-lg font-semibold text-gray-600 dark:text-gray-300">{venue}</p>}
-        <h1 className="text-3xl font-bold">Choose your language</h1>
+        <h1 className="text-3xl font-bold text-midnight">Choose your language</h1>
         <input
           type="search"
           value={filter}

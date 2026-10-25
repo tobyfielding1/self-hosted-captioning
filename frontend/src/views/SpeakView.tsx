@@ -308,7 +308,7 @@ export default function SpeakView({
             <Button big onClick={() => openMic(deviceId)}>
               Turn on the microphone
             </Button>
-            <p className="text-gray-600">Your browser will ask for permission. Click Allow.</p>
+            <p>Your browser will ask for permission. Click Allow.</p>
           </div>
         )}
         {mic === "asking" && <p className="text-lg">Waiting for permission... click Allow if your browser asks.</p>}
@@ -401,10 +401,10 @@ export default function SpeakView({
         </div>
 
         {live && (
-          <p className="text-gray-700">
+          <p>
             Keep this tab open.{" "}
             {wakeLockSupported() ? (wakeLock ? "The screen will stay on." : "") : "Turn off sleep on this device."}{" "}
-            <a className="underline text-purple" href={listenerLink()} target="_blank" rel="noreferrer">
+            <a className="underline text-blue-600 hover:text-blue-800" href={listenerLink()} target="_blank" rel="noreferrer">
               Open the audience view
             </a>
           </p>
@@ -478,11 +478,11 @@ export default function SpeakView({
             <dt className="font-semibold">It says "out of credit"</dt>
             <dd>
               Top up under{" "}
-              <a className="underline text-purple" href="https://console.soniox.com/org/billing/reports" target="_blank" rel="noreferrer">
+              <a className="underline text-blue-600 hover:text-blue-800" href="https://console.soniox.com/org/billing/reports" target="_blank" rel="noreferrer">
                 Billing
               </a>
               . Turn on "Enable autopay" under{" "}
-              <a className="underline text-purple" href="https://console.soniox.com/org/billing/payment-setup" target="_blank" rel="noreferrer">
+              <a className="underline text-blue-600 hover:text-blue-800" href="https://console.soniox.com/org/billing/payment-setup" target="_blank" rel="noreferrer">
                 Payment setup
               </a>{" "}
               so this doesn't happen again.
