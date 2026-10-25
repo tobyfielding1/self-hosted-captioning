@@ -490,7 +490,10 @@ if $ASK_KEY; then
   while :; do
     printf '\n'
     note "(Nothing appears while you paste. That's normal.)"
-    read -rsp "   Soniox key: " KEY
+    read -rsp "   Soniox key: " KEY || KEY=""
+    # A paste can include extra lines. Keep the first and drop the rest, so the
+    # message is shown once and the next prompt waits for a new paste.
+    while IFS= read -r -s -t 0.1 _; do :; done || true
     printf '\n'
     KEY="$(tr -d '[:space:]' <<<"$KEY")"
     if [ -z "$KEY" ]; then
