@@ -414,6 +414,20 @@ background() {
     fi
   fi
 
+  # Cloud Run stores the built image in this repository. If it is missing, deploy
+  # reports a permission error instead of creating it.
+  step "Preparing where the server image is stored"
+  if ! gcloud artifacts repositories create cloud-run-source-deploy \
+    --repository-format=docker \
+    --location="$REGION" \
+    --description="Cloud Run source deploys" \
+    --quiet >"$WORK/ar.err" 2>&1; then
+    if ! grep -q -e ALREADY_EXISTS -e "already exists" "$WORK/ar.err"; then
+      cat "$WORK/ar.err"
+      die "preparing where the server image is stored"
+    fi
+  fi
+
   # The Soniox key is added afterwards (a quick settings change), so the build doesn't wait for it.
   # A new build account is often denied for a minute or two after its role is granted.
   step "Building the captioning server (about 3 minutes)"
@@ -435,7 +449,7 @@ background() {
     fi
     cat "$WORK/deploy.out"
     attempt=$((attempt + 1))
-    if [ "$attempt" -ge 6 ] || ! grep -q "missing required IAM permissions" "$WORK/deploy.out"; then
+    if [ "$attempt" -ge 6 ] || ! grep -q -e "missing required IAM permissions" -e "artifactregistry.repositories.get" "$WORK/deploy.out"; then
       die "building the captioning server"
     fi
     step "Waiting for Google to apply the new permissions"
