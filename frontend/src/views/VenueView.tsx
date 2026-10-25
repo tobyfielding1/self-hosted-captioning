@@ -149,7 +149,7 @@ function Intro() {
           If you end up in a blank terminal, click Set up live captions again.
         </p>
         <p className="text-sm text-gray-600">
-          Already set up? Open the sound desk bookmark. Lost that link? Run the install again and pick that venue.
+          Already set up? Open the sound desk bookmark. Lost that link? Click the setup link again and pick that venue to get the link again.
         </p>
       </Card>
     </>
