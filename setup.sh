@@ -414,31 +414,8 @@ background() {
     fi
   fi
 
-  # Cloud Run stores the built image in this repository. A newly enabled
-  # Artifact Registry often denies the first create for a minute or two.
-  step "Preparing where the server image is stored"
-  local ar_tries=0
-  while :; do
-    if gcloud artifacts repositories create cloud-run-source-deploy \
-      --repository-format=docker \
-      --location="$REGION" \
-      --description="Cloud Run source deploys" \
-      --quiet >"$WORK/ar.err" 2>&1 \
-      || grep -q -e ALREADY_EXISTS -e "already exists" "$WORK/ar.err"; then
-      break
-    fi
-    ar_tries=$((ar_tries + 1))
-    if [ "$ar_tries" -ge 12 ] || ! grep -q "artifactregistry.repositories.create" "$WORK/ar.err"; then
-      cat "$WORK/ar.err"
-      die "preparing where the server image is stored"
-    fi
-    step "Waiting for Google to allow the image repository"
-    sleep 10
-    step "Preparing where the server image is stored"
-  done
-
   # The Soniox key is added afterwards (a quick settings change), so the build doesn't wait for it.
-  # A new build account is often denied for a minute or two after its role is granted.
+  # A new build account, or a newly enabled Artifact Registry, is often denied for a minute or two.
   step "Building the captioning server (about 3 minutes)"
   local attempt=0
   while :; do
@@ -458,7 +435,7 @@ background() {
     fi
     cat "$WORK/deploy.out"
     attempt=$((attempt + 1))
-    if [ "$attempt" -ge 6 ] || ! grep -q -e "missing required IAM permissions" -e "artifactregistry.repositories.get" "$WORK/deploy.out"; then
+    if [ "$attempt" -ge 6 ] || ! grep -q -e "missing required IAM permissions" -e "artifactregistry.repositories.get" -e "artifactregistry.repositories.create" "$WORK/deploy.out"; then
       die "building the captioning server"
     fi
     step "Waiting for Google to apply the new permissions"
