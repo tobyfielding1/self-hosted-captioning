@@ -9,11 +9,12 @@
   --font-caption: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-weight-bold: 600;
 
-  --color-veil: #e5d4ed;
-  --color-accent: #6d72c3;
-  --color-purple: #5941a9;
-  --color-charcoal: #514f59;
-  --color-midnight: #1d1128;
+  --color-veil: #daffed;
+  --color-accent: #9bf3f0;
+  --color-leaf: #adfc92;
+  --color-purple: #473198;
+  --color-charcoal: #473198;
+  --color-midnight: #4a0d67;
 }
 
 html,

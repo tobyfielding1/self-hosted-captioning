@@ -211,7 +211,7 @@ function Finished({
         <p className="text-sm break-all text-gray-600">{speak}</p>
         <div className="flex flex-wrap gap-3">
           <Button onClick={() => copy("speak", speak)}>{copied === "speak" ? "Copied" : "Copy link"}</Button>
-          <a href={mailto} className="bg-white border-2 border-accent/40 rounded-xl px-4 py-2.5 font-semibold hover:bg-veil">
+          <a href={mailto} className="bg-white border-2 border-purple/30 rounded-xl px-4 py-2.5 font-semibold hover:bg-veil">
             Email to sound desk team
           </a>
         </div>
@@ -395,7 +395,7 @@ function Delete({ status }: { status: Status | null | undefined }) {
         href={ANOTHER_URL}
         target="_blank"
         rel="noreferrer"
-        className="inline-block bg-white border-2 border-accent/40 rounded-xl px-4 py-2.5 font-semibold hover:bg-veil"
+        className="inline-block bg-white border-2 border-purple/30 rounded-xl px-4 py-2.5 font-semibold hover:bg-veil"
       >
         Set up another venue
       </a>

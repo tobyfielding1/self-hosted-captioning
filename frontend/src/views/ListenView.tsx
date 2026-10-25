@@ -235,7 +235,7 @@ export default function ListenView() {
 
   return (
     <Shell dark={dark}>
-      <header className="border-b border-accent/30 dark:border-white/15">
+      <header className="border-b border-purple/30 dark:border-white/15">
         {venue && (
           <button
             type="button"
@@ -253,7 +253,7 @@ export default function ListenView() {
           <button
             type="button"
             onClick={backToLanguages}
-            className="h-11 shrink-0 rounded-lg border border-accent/40 px-3 text-lg font-semibold hover:bg-veil dark:border-white/20 dark:hover:bg-white/10"
+            className="h-11 shrink-0 rounded-lg border border-purple/30 px-3 text-lg font-semibold hover:bg-veil dark:border-white/20 dark:hover:bg-white/10"
           >
             Back
           </button>
@@ -300,7 +300,7 @@ export default function ListenView() {
         </button>
       )}
 
-      <footer className="px-4 py-2 text-xs text-gray-500 border-t border-accent/30 dark:border-white/15">
+      <footer className="px-4 py-2 text-xs text-gray-500 border-t border-purple/30 dark:border-white/15">
         Audio is not recorded or stored. Captions are machine-generated.
       </footer>
     </Shell>
@@ -317,7 +317,7 @@ function IconButton({ label: text, onClick, children }: { label: string; onClick
       onClick={onClick}
       aria-label={text}
       title={text}
-      className="min-w-11 h-11 rounded-lg border border-accent/40 text-lg font-semibold hover:bg-veil dark:border-white/20 dark:hover:bg-white/10"
+      className="min-w-11 h-11 rounded-lg border border-purple/30 text-lg font-semibold hover:bg-veil dark:border-white/20 dark:hover:bg-white/10"
     >
       {children}
     </button>
@@ -379,13 +379,13 @@ function LanguageChooser({
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Search"
           aria-label="Search languages"
-          className="w-full rounded-xl border-2 border-accent/40 dark:border-white/20 bg-transparent px-4 py-3 text-lg"
+          className="w-full rounded-xl border-2 border-purple/30 dark:border-white/20 bg-transparent px-4 py-3 text-lg"
         />
         {showOriginal && (
           <button
             onClick={() => onChoose(ORIGINAL)}
-            className={`w-full text-left px-4 py-4 rounded-xl border-2 bg-veil dark:bg-purple/30 hover:brightness-95 ${
-              current === ORIGINAL ? "border-purple" : "border-accent/50"
+            className={`w-full text-left px-4 py-4 rounded-xl border-2 bg-leaf/40 hover:bg-leaf/55 dark:bg-purple/30 dark:hover:bg-purple/40 ${
+              current === ORIGINAL ? "border-purple" : "border-purple/30"
             }`}
           >
             <span className="block text-xl">Original</span>
@@ -406,7 +406,7 @@ function LanguageChooser({
               <button
                 onClick={() => onChoose(code)}
                 className={`w-full flex items-center gap-3 text-left text-xl px-4 py-4 rounded-xl border-2 ${
-                  code === current ? "border-purple" : "border-accent/30 dark:border-white/15"
+                  code === current ? "border-purple" : "border-purple/30 dark:border-white/15"
                 } hover:bg-veil dark:hover:bg-white/10`}
               >
                 <span className="flex-1">{label(code, names.get(code))}</span>

@@ -301,7 +301,7 @@ export default function SpeakView({
       )}
 
       {/* Step 1: microphone */}
-      <section className="bg-white rounded-2xl border border-accent/30 p-5 space-y-4">
+      <section className="bg-white rounded-2xl border border-purple/30 p-5 space-y-4">
         {mic === "idle" && (
           <div className="space-y-3">
             <p className="text-lg">First, let this page hear the sound desk.</p>
@@ -337,7 +337,7 @@ export default function SpeakView({
               <label className="block">
                 <span className="font-semibold">Sound comes from</span>
                 <select
-                  className="mt-1 block w-full rounded-xl border-2 border-accent/40 px-3 py-2.5 text-lg bg-white"
+                  className="mt-1 block w-full rounded-xl border-2 border-purple/30 px-3 py-2.5 text-lg bg-white"
                   value={deviceId}
                   onChange={(e) => pickDevice(e.target.value)}
                 >
@@ -366,7 +366,7 @@ export default function SpeakView({
       </section>
 
       {/* Step 2: go live */}
-      <section className="bg-white rounded-2xl border border-accent/30 p-5 space-y-4">
+      <section className="bg-white rounded-2xl border border-purple/30 p-5 space-y-4">
         <p className="text-3xl font-bold" aria-live="polite">
           {headline}
         </p>
