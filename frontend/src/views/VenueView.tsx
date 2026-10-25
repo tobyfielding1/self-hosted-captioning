@@ -22,7 +22,7 @@ const MIN_NODE_MAJOR = 24;
 const TIP_DISMISSED = "captioning.fasterTipDismissed";
 
 /** The venue team's page: an intro, or the sound desk when the address is a sound desk link. */
-export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
+export default function VenueView({ shareOpen }: { shareOpen: boolean }) {
   const backend = getBackend();
   const token = getToken();
   const [status, setStatus] = useState<Status | null | undefined>(undefined);
@@ -63,7 +63,7 @@ export default function ChurchView({ shareOpen }: { shareOpen: boolean }) {
         <DeskGate access={access === "bad" || access === "down" ? access : "checking"} />
       ) : allowed ? (
         <>
-          {status?.venue && <h1 className="text-3xl font-bold">{status.venue}</h1>}
+          {status?.venue && <h1 className="text-3xl font-bold text-midnight">{status.venue}</h1>}
           <Notices status={status} />
           <SpeakView
             settings={<Delete status={status} />}
@@ -105,7 +105,7 @@ function DeskGate({ access }: { access: "checking" | "down" | "bad" }) {
 function Intro() {
   return (
     <>
-      <h1 className="text-3xl font-bold">Live captions</h1>
+      <h1 className="text-3xl font-bold text-midnight">Live captions</h1>
       <p className="text-lg text-gray-700">
         People in the room read along on their phones, each in their own language. The sound desk runs it from a laptop.
         Nothing to install.
@@ -127,8 +127,8 @@ function Intro() {
           code that stays the same. The terminal lists any venues already on this account. The last line sets up another.
         </p>
         <p>
-          Google Cloud hosts the server. A normal service stays in the free tier, but Google still asks for a card,
-          and the install emails you if this venue passes 5 a month. Soniox is the part that costs money. You choose how
+          Google Cloud hosts the server. Normal use stays in the free tier, but Google still asks for a card,
+          and the install emails you if this venue passes £5 a month. Soniox is the part that costs money. You choose how
           much credit to add, and it is only used while someone is being captioned: quiet audio isn't sent, and a
           language runs only while someone is reading it. That costs less than a captioning service you subscribe to.
           See{" "}
@@ -141,7 +141,7 @@ function Intro() {
           href={INSTALL_URL}
           target="_blank"
           rel="noreferrer"
-          className="inline-block bg-blue-700 hover:bg-blue-800 text-white text-2xl font-semibold px-8 py-5 rounded-2xl"
+          className="inline-block bg-purple hover:bg-midnight text-white text-2xl font-semibold px-8 py-5 rounded-2xl"
         >
           Set up live captions
         </a>
@@ -196,7 +196,7 @@ function Finished({
     "Bookmark it as \"Captions\":",
     speak,
     "",
-    "Every service: open the bookmark, check the bar moves when someone speaks, press Start. Press Stop at the end.",
+    "Each time: open the bookmark, check the bar moves when someone speaks, press Start. Press Stop at the end.",
     "",
     "Please keep this link private.",
   ].join("\n");
@@ -211,7 +211,7 @@ function Finished({
         <p className="text-sm break-all text-gray-600">{speak}</p>
         <div className="flex flex-wrap gap-3">
           <Button onClick={() => copy("speak", speak)}>{copied === "speak" ? "Copied" : "Copy link"}</Button>
-          <a href={mailto} className="bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50">
+          <a href={mailto} className="bg-white border-2 border-accent/40 rounded-xl px-4 py-2.5 font-semibold hover:bg-veil">
             Email to sound desk team
           </a>
         </div>
@@ -225,7 +225,7 @@ function Finished({
             {copied === "listen" ? "Copied" : "Copy audience link"}
           </Button>
         </div>
-        <a className="inline-block underline text-blue-800" href={listen} target="_blank" rel="noreferrer">
+        <a className="inline-block underline text-purple" href={listen} target="_blank" rel="noreferrer">
           Open the audience view
         </a>
       </Details>
@@ -284,7 +284,7 @@ function Notices({ status }: { status: Status | null | undefined }) {
 
 function ExtLink({ href, children }: { href: string; children: string }) {
   return (
-    <a className="underline text-blue-800" href={href} target="_blank" rel="noreferrer">
+    <a className="underline text-purple" href={href} target="_blank" rel="noreferrer">
       {children}
     </a>
   );
@@ -395,7 +395,7 @@ function Delete({ status }: { status: Status | null | undefined }) {
         href={ANOTHER_URL}
         target="_blank"
         rel="noreferrer"
-        className="inline-block bg-white border-2 border-gray-300 rounded-xl px-4 py-2.5 font-semibold hover:bg-gray-50"
+        className="inline-block bg-white border-2 border-accent/40 rounded-xl px-4 py-2.5 font-semibold hover:bg-veil"
       >
         Set up another venue
       </a>

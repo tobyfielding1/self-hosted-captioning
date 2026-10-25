@@ -3,10 +3,10 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 type Variant = "primary" | "danger" | "secondary" | "ghost";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-blue-700 text-white hover:bg-blue-800 disabled:bg-blue-300",
+  primary: "bg-purple text-white hover:bg-midnight disabled:bg-accent",
   danger: "bg-red-700 text-white hover:bg-red-800",
-  secondary: "bg-white text-gray-900 border-2 border-gray-300 hover:bg-gray-50",
-  ghost: "text-blue-800 underline underline-offset-2 hover:text-blue-950",
+  secondary: "bg-white text-midnight border-2 border-accent/40 hover:bg-veil",
+  ghost: "text-purple underline underline-offset-2 hover:text-midnight",
 };
 
 export function Button({
@@ -26,7 +26,7 @@ export function Button({
 
 export function Banner({ tone = "info", children, onClose }: { tone?: "info" | "warn" | "error" | "ok"; children: ReactNode; onClose?: () => void }) {
   const tones = {
-    info: "bg-blue-50 border-blue-300 text-blue-950",
+    info: "bg-white border-purple text-midnight",
     warn: "bg-amber-50 border-amber-400 text-amber-950",
     error: "bg-red-50 border-red-400 text-red-950",
     ok: "bg-green-50 border-green-400 text-green-950",
@@ -45,8 +45,8 @@ export function Banner({ tone = "info", children, onClose }: { tone?: "info" | "
 
 export function Card({ title, children }: { title?: ReactNode; children: ReactNode }) {
   return (
-    <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-3">
-      {title && <h2 className="text-xl font-bold">{title}</h2>}
+    <section className="bg-white rounded-2xl border border-accent/30 shadow-sm p-5 space-y-3">
+      {title && <h2 className="text-xl font-bold text-midnight">{title}</h2>}
       {children}
     </section>
   );
@@ -54,7 +54,7 @@ export function Card({ title, children }: { title?: ReactNode; children: ReactNo
 
 export function Details({ summary, open, children }: { summary: string; open?: boolean; children: ReactNode }) {
   return (
-    <details open={open} className="bg-white rounded-2xl border border-gray-200 p-4 group">
+    <details open={open} className="bg-white rounded-2xl border border-accent/30 p-4 group">
       <summary className="cursor-pointer font-semibold select-none">{summary}</summary>
       <div className="pt-3 space-y-3">{children}</div>
     </details>

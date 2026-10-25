@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getBackend, getToken, isAudience, shouldOpenShare } from "./backend";
-import ChurchView from "./views/ChurchView";
+import VenueView from "./views/VenueView";
 import ListenView from "./views/ListenView";
 
 export default function App() {
@@ -27,8 +27,8 @@ export default function App() {
   if (listen) return <ListenView key={location.search} />;
 
   return (
-    <div className="min-h-full bg-gray-100 text-gray-900">
-      <ChurchView key={`${location.pathname}${location.hash}`} shareOpen={shouldOpenShare()} />
+    <div className="min-h-full bg-veil text-charcoal">
+      <VenueView key={`${location.pathname}${location.hash}`} shareOpen={shouldOpenShare()} />
     </div>
   );
 }

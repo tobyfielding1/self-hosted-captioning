@@ -132,9 +132,51 @@ start_new_venue() {
 load_billing_accounts() {
   mapfile -t ACCOUNTS < <(gcloud billing accounts list --filter=open=true --format='value(name.basename(),displayName)' 2>>"$LOG" || true)
 }
+# A new account can take a minute to show up. Poll until one id appears that was not already listed.
+# Sets BILLING and returns 0 when exactly one new account appears. Several new accounts returns 1
+# so the caller can show the list.
+look_for_new_billing() {
+  local -a previous=("$@") found=()
+  local deadline id row p known name
+  while true; do
+    deadline=$((SECONDS + 60))
+    spin "Looking for the new billing account"
+    while (( SECONDS < deadline )); do
+      load_billing_accounts
+      found=()
+      if [ "${#ACCOUNTS[@]}" -gt 0 ]; then
+        for row in "${ACCOUNTS[@]}"; do
+          id="$(cut -f1 <<<"$row")"
+          known=false
+          if [ "${#previous[@]}" -gt 0 ]; then
+            for p in "${previous[@]}"; do
+              [ "$p" = "$id" ] && known=true
+            done
+          fi
+          $known || found+=("$row")
+        done
+      fi
+      if [ "${#found[@]}" -eq 1 ]; then
+        spin_stop
+        BILLING="$(cut -f1 <<<"${found[0]}")"
+        name="$(cut -f2 <<<"${found[0]}")"
+        [ -n "$name" ] || name="$BILLING"
+        note "Using ${name}."
+        return 0
+      fi
+      [ "${#found[@]}" -le 1 ] || { spin_stop; return 1; }
+      (( SECONDS >= deadline )) && break
+      sleep 5
+    done
+    spin_stop
+    note "The new billing account hasn't appeared yet. Press Enter to look again."
+    read -rp "   Press Enter: " _
+  done
+}
 # Sets BILLING. Creating an account happens on Google's page; this waits and lists again.
 choose_billing() {
   local n extra i name
+  local -a seen=()
   while true; do
     STEP="checking billing"
     spin "Checking billing"
@@ -146,24 +188,28 @@ choose_billing() {
       note "This Google account has no billing account yet."
       note "Google Cloud needs one before it will host anything, even on the free tier."
       note "Open https://console.cloud.google.com/billing/create and add a card."
-      note "A normal service stays in the free tier. The install emails you if this venue passes 5 a month."
+      note "Normal use stays in the free tier. The install emails you if this venue passes £5 a month."
       note "When that is done, press Enter."
       read -rp "   Press Enter: " _
+      look_for_new_billing && return 0
       continue
     fi
     bold "Which billing account should this venue use?"
+    seen=()
     for i in "${!ACCOUNTS[@]}"; do
+      seen+=("$(cut -f1 <<<"${ACCOUNTS[$i]}")")
       name="$(cut -f2 <<<"${ACCOUNTS[$i]}")"
-      [ -n "$name" ] || name="$(cut -f1 <<<"${ACCOUNTS[$i]}")"
+      [ -n "$name" ] || name="${seen[$i]}"
       printf '  %d) %s\n' "$((i + 1))" "$name"
     done
     printf '  %d) None of these. Create a new billing account.\n' "$extra"
     read -rp "   Number: " CHOICE
     if [ "$CHOICE" = "$extra" ]; then
       note "Open https://console.cloud.google.com/billing/create and add a card."
-      note "A normal service stays in the free tier. The install emails you if this venue passes 5 a month."
+      note "Normal use stays in the free tier. The install emails you if this venue passes £5 a month."
       note "When that is done, press Enter."
       read -rp "   Press Enter: " _
+      look_for_new_billing "${seen[@]}" && return 0
       continue
     fi
     [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "$n" ] || fail "That wasn't one of the numbers."
@@ -294,7 +340,7 @@ if $ROTATE; then
     fail "Couldn't update the captioning server." "Try this again, or run the install."
   URL="$(gcloud run services describe "$SERVICE" --region "$EXISTING_REGION" --format='value(status.url)' 2>>"$LOG")"
   bold "Done! The old sound desk link no longer works. Open this new one:"
-  printf '\n   %s#backend=%s&token=%s\n\n' "$APP_URL" "$URL" "$TOKEN"
+  printf '\n   %s#backend=%s&token=%s\n\n' "$APP_URL" "${URL#https://}" "$TOKEN"
   note "Keep that link private. Open it once on each sound desk computer and bookmark it again."
   note "The QR code and audience link stay the same."
   exit 0
@@ -437,7 +483,7 @@ if $ASK_KEY; then
   note "1. Open https://console.soniox.com and sign up, or sign in."
   note "2. Add a small amount of credit under Billing (prices: https://soniox.com/pricing)."
   note "   Quiet audio isn't sent, and a language runs only while someone is reading it."
-  note "   Autopay is optional. It tops up by an amount you set, so a long service doesn't stop when the credit runs out."
+  note "   Autopay is optional. It tops up by an amount you set, so captions don't stop in the middle when the credit runs out."
   note "3. Click \"API keys\", then \"Create API key\", and copy it."
   note "4. Come back here, paste it below and press Enter."
   TRIES=0
@@ -501,5 +547,5 @@ if [ "$CODE" = "403" ]; then
 fi
 
 bold "Done! Open this link to finish:"
-printf '\n   %s#backend=%s&token=%s\n\n' "$APP_URL" "$URL" "$TOKEN"
+printf '\n   %s#backend=%s&token=%s\n\n' "$APP_URL" "${URL#https://}" "$TOKEN"
 note "Keep that link private: it includes the sound desk's access."

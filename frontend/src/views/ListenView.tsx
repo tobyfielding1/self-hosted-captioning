@@ -223,9 +223,9 @@ export default function ListenView() {
   const empty = !caption.lines.length && !caption.current && !caption.partial;
   let message: string | null = null;
   if (phase === "checking") message = "Connecting...";
-  else if (phase === "waiting") message = "Waiting for the service to start. This page will connect by itself.";
-  else if (phase === "ended") message = "The service has ended.";
-  else if (phase === "gave-up") message = "No service has started yet.";
+  else if (phase === "waiting") message = "Waiting for captions to start. This page will connect by itself.";
+  else if (phase === "ended") message = "Captions have stopped.";
+  else if (phase === "gave-up") message = "Captions haven't started yet.";
   else if (phase === "outdated") message = "Captions need an update. Please ask the venue to re-run the install.";
   else if (phase === "unsupported") message = "This language isn't available. Please choose another.";
   else if (paused) message = "Captions paused";
@@ -235,7 +235,7 @@ export default function ListenView() {
 
   return (
     <Shell dark={dark}>
-      <header className="border-b border-gray-200 dark:border-gray-800">
+      <header className="border-b border-accent/30 dark:border-white/15">
         {venue && (
           <button
             type="button"
@@ -253,7 +253,7 @@ export default function ListenView() {
           <button
             type="button"
             onClick={backToLanguages}
-            className="h-11 shrink-0 rounded-lg border border-gray-300 px-3 text-lg font-semibold hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-900"
+            className="h-11 shrink-0 rounded-lg border border-accent/40 px-3 text-lg font-semibold hover:bg-veil dark:border-white/20 dark:hover:bg-white/10"
           >
             Back
           </button>
@@ -269,7 +269,7 @@ export default function ListenView() {
         </div>
       </header>
 
-      <div ref={scroller} onScroll={onScroll} className="flex-1 overflow-y-auto px-5 py-4" style={{ fontSize: SIZES[size], lineHeight: 1.35 }}>
+      <div ref={scroller} onScroll={onScroll} className="font-caption flex-1 overflow-y-auto px-5 py-4" style={{ fontSize: SIZES[size], lineHeight: 1.35 }}>
         <div aria-live="polite" aria-relevant="additions" className="space-y-3">
           {caption.lines.map((line, i) => (
             <p key={i}>{line}</p>
@@ -285,7 +285,7 @@ export default function ListenView() {
         {notice && <p className="mt-4 text-base text-amber-700 dark:text-amber-400">{notice}</p>}
         {message && <p className={`mt-6 ${empty ? "" : "text-base"} text-gray-500`}>{message}</p>}
         {(phase === "ended" || phase === "gave-up") && (
-          <button onClick={() => setAttempt((a) => a + 1)} className="mt-4 text-base underline text-blue-700 dark:text-blue-400">
+          <button onClick={() => setAttempt((a) => a + 1)} className="mt-4 text-base underline text-purple dark:text-veil">
             Check again
           </button>
         )}
@@ -294,13 +294,13 @@ export default function ListenView() {
       {!follow && (
         <button
           onClick={() => setFollow(true)}
-          className="fixed bottom-16 left-1/2 -translate-x-1/2 rounded-full bg-blue-700 text-white px-5 py-2 text-lg shadow-lg"
+          className="fixed bottom-16 left-1/2 -translate-x-1/2 rounded-full bg-purple text-white px-5 py-2 text-lg shadow-lg"
         >
           Jump to live
         </button>
       )}
 
-      <footer className="px-4 py-2 text-xs text-gray-500 border-t border-gray-200 dark:border-gray-800">
+      <footer className="px-4 py-2 text-xs text-gray-500 border-t border-accent/30 dark:border-white/15">
         Audio is not recorded or stored. Captions are machine-generated.
       </footer>
     </Shell>
@@ -308,7 +308,7 @@ export default function ListenView() {
 }
 
 function Shell({ dark, children }: { dark: boolean; children: React.ReactNode }) {
-  return <div className={`h-full flex flex-col ${dark ? "bg-black text-white" : "bg-white text-black"}`}>{children}</div>;
+  return <div className={`h-full flex flex-col ${dark ? "bg-midnight text-white" : "bg-white text-midnight"}`}>{children}</div>;
 }
 
 function IconButton({ label: text, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
@@ -317,7 +317,7 @@ function IconButton({ label: text, onClick, children }: { label: string; onClick
       onClick={onClick}
       aria-label={text}
       title={text}
-      className="min-w-11 h-11 rounded-lg border border-gray-300 dark:border-gray-700 text-lg font-semibold hover:bg-gray-100 dark:hover:bg-gray-900"
+      className="min-w-11 h-11 rounded-lg border border-accent/40 text-lg font-semibold hover:bg-veil dark:border-white/20 dark:hover:bg-white/10"
     >
       {children}
     </button>
@@ -379,13 +379,13 @@ function LanguageChooser({
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Search"
           aria-label="Search languages"
-          className="w-full rounded-xl border-2 border-gray-300 dark:border-gray-700 bg-transparent px-4 py-3 text-lg"
+          className="w-full rounded-xl border-2 border-accent/40 dark:border-white/20 bg-transparent px-4 py-3 text-lg"
         />
         {showOriginal && (
           <button
             onClick={() => onChoose(ORIGINAL)}
-            className={`w-full text-left px-4 py-4 rounded-xl border-2 bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 dark:hover:bg-blue-900 ${
-              current === ORIGINAL ? "border-blue-700" : "border-blue-200 dark:border-blue-800"
+            className={`w-full text-left px-4 py-4 rounded-xl border-2 bg-veil dark:bg-purple/30 hover:brightness-95 ${
+              current === ORIGINAL ? "border-purple" : "border-accent/50"
             }`}
           >
             <span className="block text-xl">Original</span>
@@ -406,8 +406,8 @@ function LanguageChooser({
               <button
                 onClick={() => onChoose(code)}
                 className={`w-full flex items-center gap-3 text-left text-xl px-4 py-4 rounded-xl border-2 ${
-                  code === current ? "border-blue-700" : "border-gray-200 dark:border-gray-800"
-                } hover:bg-gray-100 dark:hover:bg-gray-900`}
+                  code === current ? "border-purple" : "border-accent/30 dark:border-white/15"
+                } hover:bg-veil dark:hover:bg-white/10`}
               >
                 <span className="flex-1">{label(code, names.get(code))}</span>
                 {via.has(code) && <ViaTag via={via.get(code)!} />}

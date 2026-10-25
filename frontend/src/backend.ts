@@ -53,13 +53,26 @@ export function isAudience(): boolean {
 
 const clean = (url: string) => url.trim().replace(/\/+$/, "");
 
+/** Venue links omit the scheme. A bare host is https. An `http://` address is kept for local use. */
+function absoluteBackend(url: string): string {
+  const trimmed = clean(url);
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+/** `https://` is left out of links. `http://` is written in full. */
+function backendForLink(url: string): string {
+  return url.replace(/^https:\/\//i, "");
+}
+
 /** True when this device just received a sound desk token it did not already have. */
 let shareAfterLink = false;
 export const shouldOpenShare = () => shareAfterLink;
 
 /**
  * The address bar is the access. An audience link is `?backend=`. A sound desk
- * link is `#backend=&token=`. Share opens when this browser has not seen this token before.
+ * link is `#backend=&token=`. The server is written as a host, and `https://` is added
+ * when it is missing. Share opens when this browser has not seen this token before.
  */
 export function initFromUrl() {
   localStorage.removeItem("captioning.backend");
@@ -72,7 +85,8 @@ export function initFromUrl() {
 
 export function getBackend(): string | null {
   const backend = linkParams().get("backend");
-  return backend ? clean(backend) : null;
+  if (!backend?.trim()) return null;
+  return absoluteBackend(backend);
 }
 
 export const getToken = () => linkParams().get("token")?.trim() || null;
@@ -88,11 +102,11 @@ export function siteRoot(): string {
 }
 
 export function listenerLink(backend = getBackend()): string {
-  return `${siteRoot()}?backend=${encodeURIComponent(backend ?? "")}`;
+  return `${siteRoot()}?backend=${encodeURIComponent(backend ? backendForLink(backend) : "")}`;
 }
 
 export function speakLink(backend = getBackend(), token = getToken()): string {
-  return `${siteRoot()}#backend=${encodeURIComponent(backend ?? "")}&token=${encodeURIComponent(token ?? "")}`;
+  return `${siteRoot()}#backend=${encodeURIComponent(backend ? backendForLink(backend) : "")}&token=${encodeURIComponent(token ?? "")}`;
 }
 
 export type DeskAccess = "ok" | "bad" | "down" | "legacy";

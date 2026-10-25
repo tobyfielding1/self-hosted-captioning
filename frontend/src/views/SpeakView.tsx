@@ -301,7 +301,7 @@ export default function SpeakView({
       )}
 
       {/* Step 1: microphone */}
-      <section className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
+      <section className="bg-white rounded-2xl border border-accent/30 p-5 space-y-4">
         {mic === "idle" && (
           <div className="space-y-3">
             <p className="text-lg">First, let this page hear the sound desk.</p>
@@ -337,7 +337,7 @@ export default function SpeakView({
               <label className="block">
                 <span className="font-semibold">Sound comes from</span>
                 <select
-                  className="mt-1 block w-full rounded-xl border-2 border-gray-300 px-3 py-2.5 text-lg bg-white"
+                  className="mt-1 block w-full rounded-xl border-2 border-accent/40 px-3 py-2.5 text-lg bg-white"
                   value={deviceId}
                   onChange={(e) => pickDevice(e.target.value)}
                 >
@@ -366,11 +366,11 @@ export default function SpeakView({
       </section>
 
       {/* Step 2: go live */}
-      <section className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
+      <section className="bg-white rounded-2xl border border-accent/30 p-5 space-y-4">
         <p className="text-3xl font-bold" aria-live="polite">
           {headline}
         </p>
-        {live && conn === "live" && stats?.testing && <p className="text-blue-800">Test captions running for a minute.</p>}
+        {live && conn === "live" && stats?.testing && <p className="text-purple">Test captions running for a minute.</p>}
 
         {!live && status?.streaming && (
           <Banner tone="warn">
@@ -404,7 +404,7 @@ export default function SpeakView({
           <p className="text-gray-700">
             Keep this tab open.{" "}
             {wakeLockSupported() ? (wakeLock ? "The screen will stay on." : "") : "Turn off sleep on this device."}{" "}
-            <a className="underline text-blue-800" href={listenerLink()} target="_blank" rel="noreferrer">
+            <a className="underline text-purple" href={listenerLink()} target="_blank" rel="noreferrer">
               Open the audience view
             </a>
           </p>
@@ -478,11 +478,11 @@ export default function SpeakView({
             <dt className="font-semibold">It says "out of credit"</dt>
             <dd>
               Top up under{" "}
-              <a className="underline text-blue-800" href="https://console.soniox.com/org/billing/reports" target="_blank" rel="noreferrer">
+              <a className="underline text-purple" href="https://console.soniox.com/org/billing/reports" target="_blank" rel="noreferrer">
                 Billing
               </a>
               . Turn on "Enable autopay" under{" "}
-              <a className="underline text-blue-800" href="https://console.soniox.com/org/billing/payment-setup" target="_blank" rel="noreferrer">
+              <a className="underline text-purple" href="https://console.soniox.com/org/billing/payment-setup" target="_blank" rel="noreferrer">
                 Payment setup
               </a>{" "}
               so this doesn't happen again.

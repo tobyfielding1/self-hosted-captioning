@@ -2,7 +2,7 @@
 
 ## Before you start
 
-This puts live captions on your Google account. It takes about 15 minutes. Google Cloud hosts the server. A normal service stays in the free tier, but Google still asks for a card, and the install emails you if this venue passes 5 a month. Soniox turns the speech into captions. You choose how much credit to add, and it is only used while someone is being captioned. That is the part that costs money, and it costs less than a captioning service you subscribe to.
+This puts live captions on your Google account. It takes about 15 minutes. Google Cloud hosts the server. Normal use stays in the free tier, but Google still asks for a card, and the install emails you if this venue passes £5 a month. Soniox turns the speech into captions. You choose how much credit to add, and it is only used while someone is being captioned. That is the part that costs money, and it costs less than a captioning service you subscribe to.
 
 Click **Start**. The next page has one command to copy into the terminal.
 
@@ -23,7 +23,7 @@ Google Cloud then sets itself up, which takes a few minutes. You don't need to w
 Soniox turns speech into captions and translations. This is the part that costs money. You choose how much credit to add, and it is only used while someone is being captioned.
 
 1. Open [console.soniox.com](https://console.soniox.com) and sign up, or sign in.
-2. Add a small amount of credit under Billing. You choose how much. Quiet audio isn't sent, and a language runs only while someone is reading it. That costs less than a captioning service you subscribe to. See [Soniox pricing](https://soniox.com/pricing). Autopay is optional. It tops up by an amount you set, so a long service doesn't stop when the credit runs out.
+2. Add a small amount of credit under Billing. You choose how much. Quiet audio isn't sent, and a language runs only while someone is reading it. That costs less than a captioning service you subscribe to. See [Soniox pricing](https://soniox.com/pricing). Autopay is optional. It tops up by an amount you set, so captions don't stop in the middle when the credit runs out.
 3. Click **API keys**, then **Create API key**, and copy it.
 4. Come back to the terminal, paste the key and press **Enter**. Nothing appears while you paste. That's normal.
 
