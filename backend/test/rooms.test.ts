@@ -57,10 +57,12 @@ class FakeSoniox {
         const tokens: any[] = [
           { text: "Hello", is_final: true, translation_status: target ? "original" : "none", language: "en" },
           { text: " there.", is_final: true, translation_status: target ? "original" : "none", language: "en" },
-          { text: "<end>", is_final: true },
-          { text: " and", is_final: false, translation_status: target ? "original" : "none", language: "en" },
         ];
         if (target) tokens.push({ text: `[${target}] Hola.`, is_final: true, translation_status: "translation", language: target, source_language: "en" });
+        tokens.push(
+          { text: "<end>", is_final: true },
+          { text: " and", is_final: false, translation_status: target ? "original" : "none", language: "en" },
+        );
         ws.send(JSON.stringify({ tokens }));
       });
     });
@@ -235,8 +237,14 @@ describe("cost guard", () => {
     expect(soniox.sessions[0].config.translation).toEqual({ type: "one_way", target_language: "es" });
     expect(soniox.sessions[0].config.language_hints).toBeUndefined();
     expect(soniox.sessions[0].config.model).toBe("stt-rt-v4");
-    const caption = await b.waitFor((m) => m.type === "caption" && m.current.includes("[es] Hola."));
-    expect(caption.current).not.toContain("Hello");
+    expect(soniox.sessions[0].config.enable_endpoint_detection).toBe(true);
+    expect(soniox.sessions[0].config.max_endpoint_delay_ms).toBe(2000);
+    expect(soniox.sessions[0].config.endpoint_sensitivity).toBe(0);
+    expect(soniox.sessions[0].config.endpoint_latency_adjustment_level).toBe(0);
+    const caption = await b.waitFor(
+      (m) => (m.type === "caption" && String(m.current).includes("[es] Hola.")) || (m.type === "line" && String(m.text).includes("[es] Hola.")),
+    );
+    expect(caption.type === "line" ? caption.text : caption.current).not.toContain("Hello");
   });
 
   it("puts the original above the translation when a listener asks for it", async () => {
@@ -250,8 +258,9 @@ describe("cost guard", () => {
     expect(pair.original).toBe("Hello there.");
     expect(pair.translation).toContain("Hola.");
     expect(pair.original).not.toContain("Hola");
-    const tail = await a.waitFor((m) => m.type === "bilingual" && String(m.partial).includes("and"));
+    const tail = await a.waitFor((m) => m.type === "bilingual" && String(m.originalPartial).includes("and"));
     expect(tail.translation).toBe("");
+    expect(tail.translationPartial).toBe("");
     expect(soniox.sessions).toHaveLength(1);
   });
 
@@ -387,7 +396,24 @@ describe("errors", () => {
 });
 
 describe("google fallback", () => {
-  it("translates whole sentences from the original stream", async () => {
+  it("shares one Soniox stream between the original language and every Google language", async () => {
+    app.catalog.googleTargets = new Set(["haw", "mi"]);
+    const s = await speaker();
+    await s.opened();
+    const a = listener("original");
+    const b = listener("haw");
+    const c = listener("mi");
+    await Promise.all([a.opened(), b.opened(), c.opened()]);
+    s.ws.send(FRAME);
+    await b.waitFor((m) => (m.type === "caption" && String(m.current).includes("[haw]")) || (m.type === "line" && String(m.text).includes("[haw]")));
+    await c.waitFor((m) => (m.type === "caption" && String(m.current).includes("[mi]")) || (m.type === "line" && String(m.text).includes("[mi]")));
+    expect(soniox.sessions).toHaveLength(1);
+    expect(soniox.sessions[0].config.translation).toBeUndefined();
+    expect(translations.filter((t) => t.startsWith("en->haw:")).length).toBeGreaterThan(0);
+    expect(translations.filter((t) => t.startsWith("en->mi:")).length).toBeGreaterThan(0);
+  });
+
+  it("translates the words since the last pause", async () => {
     const s = await speaker();
     await s.opened();
     const a = listener("haw");
@@ -400,13 +426,44 @@ describe("google fallback", () => {
     expect(soniox.sessions[0].config.translation).toBeUndefined();
   });
 
+  it("uses the sound desk's pause length for the next Soniox stream", async () => {
+    const s = await speaker();
+    await s.opened();
+    s.ws.send(JSON.stringify({ type: "endpoint", delayMs: 800, sensitivity: 0.3, latency: 2, enabled: false }));
+    const a = listener("original");
+    await a.opened();
+    s.ws.send(FRAME);
+    await until(() => soniox.sessions.length === 1);
+    expect(soniox.sessions[0].config.max_endpoint_delay_ms).toBe(800);
+    expect(soniox.sessions[0].config.endpoint_sensitivity).toBe(0.3);
+    expect(soniox.sessions[0].config.endpoint_latency_adjustment_level).toBe(2);
+    expect(soniox.sessions[0].config.enable_endpoint_detection).toBe(false);
+  });
+
+  it("keeps the pause length inside the range Soniox allows", async () => {
+    const s = await speaker();
+    await s.opened();
+    s.ws.send(JSON.stringify({ type: "endpoint", delayMs: 50, sensitivity: 4, latency: -2 }));
+    const a = listener("original");
+    await a.opened();
+    s.ws.send(FRAME);
+    await until(() => soniox.sessions.length === 1);
+    expect(soniox.sessions[0].config.max_endpoint_delay_ms).toBe(500);
+    expect(soniox.sessions[0].config.endpoint_sensitivity).toBe(1);
+    expect(soniox.sessions[0].config.endpoint_latency_adjustment_level).toBe(0);
+  });
+
   it("pairs a Google sentence with the original when asked", async () => {
     const s = await speaker();
     await s.opened();
     const a = listener("haw", true);
     await a.opened();
     s.ws.send(FRAME);
-    const pair = await a.waitFor((m) => m.type === "pair");
+    const opened = await a.waitFor((m) => m.type === "pair" && m.translation === "");
+    expect(opened.original).toBe("Hello there.");
+    const tail = await a.waitFor((m) => m.type === "bilingual" && String(m.originalPartial).includes("and"));
+    expect(tail.original ?? "").not.toContain("Hello");
+    const pair = await a.waitFor((m) => m.type === "pair" && m.fill);
     expect(pair.original).toBe("Hello there.");
     expect(pair.translation).toContain("[haw] Hello there.");
     expect(soniox.sessions).toHaveLength(1);

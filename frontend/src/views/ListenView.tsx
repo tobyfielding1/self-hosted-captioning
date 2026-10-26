@@ -41,12 +41,55 @@ interface BilingualState {
   lines: PairLine[];
   original: string;
   translation: string;
-  partial: string;
+  originalPartial: string;
+  translationPartial: string;
 }
 
-const EMPTY_BILINGUAL: BilingualState = { lines: [], original: "", translation: "", partial: "" };
+const EMPTY_BILINGUAL: BilingualState = { lines: [], original: "", translation: "", originalPartial: "", translationPartial: "" };
 
-const originalStyle = "italic text-gray-400 dark:text-gray-500";
+const provisional = "text-gray-400 dark:text-gray-300";
+
+function PairBlock({
+  original = "",
+  originalPartial = "",
+  translation = "",
+  translationPartial = "",
+}: {
+  original?: string;
+  originalPartial?: string;
+  translation?: string;
+  translationPartial?: string;
+}) {
+  if (!original && !originalPartial && !translation && !translationPartial) return null;
+  return (
+    <div>
+      {(original || originalPartial) && (
+        <p className="italic">
+          {original}
+          {original && originalPartial && " "}
+          {originalPartial && <span className={provisional}>{originalPartial}</span>}
+        </p>
+      )}
+      {(translation || translationPartial) && (
+        <p className="font-bold">
+          {translation}
+          {translation && translationPartial && " "}
+          {translationPartial && <span className={provisional}>{translationPartial}</span>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function readBilingual(msg: { lines?: PairLine[]; original?: string; translation?: string; originalPartial?: string; translationPartial?: string; partial?: string }): BilingualState {
+  return {
+    lines: msg.lines ?? [],
+    original: msg.original ?? "",
+    translation: msg.translation ?? "",
+    originalPartial: msg.originalPartial ?? msg.partial ?? "",
+    translationPartial: msg.translationPartial ?? "",
+  };
+}
 
 export default function ListenView() {
   const backend = getBackend();
@@ -158,24 +201,27 @@ export default function ListenView() {
           case "history":
             if (msg.bilingual) {
               setPaired(true);
-              setBilingual({
-                lines: msg.lines ?? [],
-                original: msg.original ?? "",
-                translation: msg.translation ?? "",
-                partial: msg.partial ?? "",
-              });
+              setBilingual(readBilingual(msg));
             } else setCaption({ lines: msg.lines, current: msg.current, partial: msg.partial });
             break;
           case "pair":
             setBilingual((b) => {
               const line = { original: msg.original ?? "", translation: msg.translation ?? "" };
+              if (msg.fill) {
+                const idx = b.lines.findIndex((l) => l.original === line.original && !l.translation);
+                if (idx >= 0) {
+                  const lines = b.lines.slice();
+                  lines[idx] = line;
+                  return { ...b, lines };
+                }
+              }
               const lines = msg.revise && b.lines.length ? b.lines.slice(0, -1) : b.lines;
               return { ...b, lines: [...lines, line].slice(-MAX_LINES) };
             });
             setNotice(null);
             break;
           case "bilingual":
-            setBilingual((b) => ({ ...b, original: msg.original ?? "", translation: msg.translation ?? "", partial: msg.partial ?? "" }));
+            setBilingual((b) => ({ ...b, ...readBilingual(msg), lines: b.lines }));
             setNotice(null);
             break;
           case "line":
@@ -273,7 +319,7 @@ export default function ListenView() {
 
   const showPairs = paired && lang !== ORIGINAL;
   const empty = showPairs
-    ? !bilingual.lines.length && !bilingual.original && !bilingual.translation && !bilingual.partial
+    ? !bilingual.lines.length && !bilingual.original && !bilingual.translation && !bilingual.originalPartial && !bilingual.translationPartial
     : !caption.lines.length && !caption.current && !caption.partial;
   let message: string | null = null;
   if (phase === "checking") message = "Connecting...";
@@ -342,18 +388,14 @@ export default function ListenView() {
         {showPairs ? (
           <div aria-live="polite" aria-relevant="additions" className="space-y-4">
             {bilingual.lines.map((line, i) => (
-              <div key={i}>
-                {line.original && <p className={originalStyle}>{line.original}</p>}
-                {line.translation && <p>{line.translation}</p>}
-              </div>
+              <PairBlock key={i} original={line.original} translation={line.translation} />
             ))}
-            {(bilingual.original || bilingual.translation || bilingual.partial) && (
-              <div>
-                {bilingual.original && <p className={originalStyle}>{bilingual.original}</p>}
-                {bilingual.translation && <p>{bilingual.translation}</p>}
-                {bilingual.partial && <p className={originalStyle}>{bilingual.partial}</p>}
-              </div>
-            )}
+            <PairBlock
+              original={bilingual.original}
+              originalPartial={bilingual.originalPartial}
+              translation={bilingual.translation}
+              translationPartial={bilingual.translationPartial}
+            />
           </div>
         ) : (
           <>
@@ -366,7 +408,7 @@ export default function ListenView() {
               <p className="mt-3">
                 {caption.current}
                 {caption.current && caption.partial && " "}
-                <span className="text-gray-400 dark:text-gray-500">{caption.partial}</span>
+                <span className="text-gray-400 dark:text-gray-300">{caption.partial}</span>
               </p>
             )}
           </>

@@ -1,7 +1,22 @@
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { audioSupported, guessMode, listInputs, startCapture, type Capture, type InputMode } from "../audio/capture";
-import { calibrate, DEFAULT_THRESHOLD, FRAME_MS, Gate, MAX_THRESHOLD, MIN_THRESHOLD } from "../audio/gate";
+import {
+  calibrate,
+  clampEndpointDelay,
+  clampEndpointLatency,
+  clampEndpointSensitivity,
+  clampSendAfter,
+  DEFAULT_THRESHOLD,
+  ENDPOINT_DELAY,
+  ENDPOINT_LATENCY,
+  ENDPOINT_SENSITIVITY,
+  SEND_AFTER,
+  FRAME_MS,
+  Gate,
+  MAX_THRESHOLD,
+  MIN_THRESHOLD,
+} from "../audio/gate";
 import { checkDeskAccess, getBackend, getStatus, getToken, listenerLink, protocolSupported, siteRoot, speakLink, type DeskAccess, type Status } from "../backend";
 import { englishName } from "../lib/languages";
 import { useWakeLock, wakeLockSupported } from "../lib/wakeLock";
@@ -90,7 +105,20 @@ const STORE = {
   input: "captioning.input",
   mode: (id: string) => `captioning.mode.${id || "default"}`,
   threshold: "captioning.threshold",
+  endpoint: "captioning.endpointDelay",
+  sensitivity: "captioning.endpointSensitivity",
+  latency: "captioning.endpointLatency",
+  detection: "captioning.endpointDetection",
+  sendAfter: "captioning.sendAfter",
 };
+
+const durationLabel = (ms: number) => {
+  const seconds = ms / 1000;
+  const shown = Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1);
+  return `${shown} ${seconds === 1 ? "second" : "seconds"}`;
+};
+
+const LATENCY_LABEL = ["Normal", "Sooner", "Short", "Shortest"];
 
 type MicState = "idle" | "asking" | "on" | "denied" | "interrupted" | "failed";
 
@@ -117,6 +145,23 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
   const [manualThreshold, setManualThreshold] = useState<number | null>(() => {
     const v = localStorage.getItem(STORE.threshold);
     return v ? Number(v) : null;
+  });
+  const [endpointDelay, setEndpointDelay] = useState(() => {
+    const saved = localStorage.getItem(STORE.endpoint);
+    return saved === null ? ENDPOINT_DELAY.default : clampEndpointDelay(Number(saved));
+  });
+  const [endpointSensitivity, setEndpointSensitivity] = useState(() => {
+    const saved = localStorage.getItem(STORE.sensitivity);
+    return saved === null ? ENDPOINT_SENSITIVITY.default : clampEndpointSensitivity(Number(saved));
+  });
+  const [endpointLatency, setEndpointLatency] = useState(() => {
+    const saved = localStorage.getItem(STORE.latency);
+    return saved === null ? ENDPOINT_LATENCY.default : clampEndpointLatency(Number(saved));
+  });
+  const [endpointEnabled, setEndpointEnabled] = useState(() => localStorage.getItem(STORE.detection) !== "0");
+  const [sendAfter, setSendAfter] = useState(() => {
+    const saved = localStorage.getItem(STORE.sendAfter);
+    return saved === null ? SEND_AFTER.default : clampSendAfter(Number(saved));
   });
   const [conn, setConn] = useState<ConnState>("off");
   const [stats, setStats] = useState<Stats | null>(null);
@@ -304,6 +349,13 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
     else if (levelsRef.current.length >= CALIBRATE_FRAMES) gate.threshold = calibrate(levelsRef.current.slice(-CALIBRATE_FRAMES));
     else calibrateAtRef.current = levelsRef.current.length + CALIBRATE_FRAMES;
     setThreshold(gate.threshold);
+    gate.hangoverMs = clampSendAfter(sendAfter);
+    connRef.current!.endpoint = {
+      delayMs: clampEndpointDelay(endpointDelay),
+      sensitivity: clampEndpointSensitivity(endpointSensitivity),
+      latency: clampEndpointLatency(endpointLatency),
+      enabled: endpointEnabled,
+    };
     connRef.current!.start(test);
   };
 
@@ -527,6 +579,98 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
             />
           )}
           <p className="text-sm text-gray-600">Sound below the line on the meter isn't sent.</p>
+        </div>
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 font-semibold">
+            <input
+              type="checkbox"
+              checked={endpointEnabled}
+              onChange={(e) => {
+                setEndpointEnabled(e.target.checked);
+                localStorage.setItem(STORE.detection, e.target.checked ? "1" : "0");
+              }}
+            />
+            End a line when the speaker pauses
+          </label>
+          <div>
+            <label className="font-semibold" htmlFor="endpoint-latency">
+              How soon a pause can end the line: {LATENCY_LABEL[endpointLatency]}
+            </label>
+            <input
+              id="endpoint-latency"
+              type="range"
+              className="w-full"
+              min={ENDPOINT_LATENCY.min}
+              max={ENDPOINT_LATENCY.max}
+              step={1}
+              value={endpointLatency}
+              onChange={(e) => {
+                const latency = clampEndpointLatency(Number(e.target.value));
+                setEndpointLatency(latency);
+                localStorage.setItem(STORE.latency, String(latency));
+              }}
+            />
+          </div>
+          <div>
+            <label className="font-semibold" htmlFor="endpoint-sensitivity">
+              How easily a pause counts: {endpointSensitivity === 0 ? "Normal" : endpointSensitivity < 0 ? "Less often" : "More often"}
+            </label>
+            <input
+              id="endpoint-sensitivity"
+              type="range"
+              className="w-full"
+              min={ENDPOINT_SENSITIVITY.min}
+              max={ENDPOINT_SENSITIVITY.max}
+              step={0.1}
+              value={endpointSensitivity}
+              onChange={(e) => {
+                const sensitivity = clampEndpointSensitivity(Number(e.target.value));
+                setEndpointSensitivity(sensitivity);
+                localStorage.setItem(STORE.sensitivity, String(sensitivity));
+              }}
+            />
+          </div>
+          <div>
+            <label className="font-semibold" htmlFor="endpoint-delay">
+              Longest wait for a pause: {durationLabel(endpointDelay)}
+            </label>
+            <input
+              id="endpoint-delay"
+              type="range"
+              className="w-full"
+              min={ENDPOINT_DELAY.min}
+              max={ENDPOINT_DELAY.max}
+              step={100}
+              value={endpointDelay}
+              onChange={(e) => {
+                const delay = clampEndpointDelay(Number(e.target.value));
+                setEndpointDelay(delay);
+                localStorage.setItem(STORE.endpoint, String(delay));
+              }}
+            />
+          </div>
+          <div>
+            <label className="font-semibold" htmlFor="send-after">
+              Keep sending after the sound drops: {durationLabel(sendAfter)}
+            </label>
+            <input
+              id="send-after"
+              type="range"
+              className="w-full"
+              min={SEND_AFTER.min}
+              max={SEND_AFTER.max}
+              step={100}
+              value={sendAfter}
+              onChange={(e) => {
+                const ms = clampSendAfter(Number(e.target.value));
+                setSendAfter(ms);
+                localStorage.setItem(STORE.sendAfter, String(ms));
+              }}
+            />
+          </div>
+          <p className="text-sm text-gray-600">
+            A pause ends the line and sends it for translation. How long audio keeps going after the sound drops is its own setting. Both take effect the next time you press Start.
+          </p>
         </div>
         <p className="text-sm text-gray-600 break-all">
           Server: {backend}

@@ -1,7 +1,5 @@
 const HISTORY_LINES = 20;
-const SOFT_LINE = 80;
 const HARD_LINE = 250;
-const SENTENCE_END = /[.!?。！？؟।]["'”’)]*\s*$/;
 
 /** Caption state for one language: finished lines, the line being built, and grey in-progress text. */
 export class Caption {
@@ -9,11 +7,10 @@ export class Caption {
   current = "";
   partial = "";
 
-  /** Appends final text; returns the finished line if this append completed one. */
+  /** Appends final text. A line breaks only when it is very long; pauses are handled by the caller. */
   addFinal(text: string): string | null {
     this.current += text;
-    const trimmed = this.current.trim();
-    if ((trimmed.length >= SOFT_LINE && SENTENCE_END.test(trimmed)) || trimmed.length >= HARD_LINE) return this.breakLine();
+    if (this.current.trim().length >= HARD_LINE) return this.breakLine();
     return null;
   }
 
@@ -31,30 +28,31 @@ export class Caption {
   }
 }
 
-export function endsSentence(text: string): boolean {
-  return SENTENCE_END.test(text.trim());
-}
-
 export interface PairLine {
   original: string;
   translation: string;
 }
 
-/** One utterance of original speech beside its translation, for listeners who ask for both. */
+/**
+ * One open pair until Soniox ends the utterance. Confirmed words stay on the line; the current
+ * guess replaces the partial. A translation that arrives after the pair has locked fills that pair.
+ */
 export class Pairs {
   lines: PairLine[] = [];
   original = "";
   translation = "";
-  partial = "";
+  originalPartial = "";
+  translationPartial = "";
 
   addOriginal(text: string) {
     this.original += text;
   }
 
-  /** Final translation. Fills the previous utterance when it was locked before the translation arrived. */
+  /** Final translation. Fills the previous pair when no new original has started. */
   addTranslation(text: string): "open" | "revise" {
+    const open = this.original || this.originalPartial || this.translation || this.translationPartial;
     const last = this.lines[this.lines.length - 1];
-    if (!this.original && !this.translation && last && !last.translation) {
+    if (!open && last) {
       last.translation = `${last.translation}${text}`.trim();
       return "revise";
     }
@@ -66,6 +64,8 @@ export class Pairs {
     const line = { original: this.original.trim(), translation: this.translation.trim() };
     this.original = "";
     this.translation = "";
+    this.originalPartial = "";
+    this.translationPartial = "";
     if (!line.original && !line.translation) return null;
     this.lines.push(line);
     if (this.lines.length > HISTORY_LINES) this.lines.shift();
@@ -85,7 +85,8 @@ export class Pairs {
       lines: this.lines,
       original: this.original.trim(),
       translation: this.translation.trim(),
-      partial: this.partial.trim(),
+      originalPartial: this.originalPartial.trim(),
+      translationPartial: this.translationPartial.trim(),
     };
   }
 }

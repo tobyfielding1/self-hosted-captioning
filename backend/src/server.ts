@@ -12,7 +12,7 @@ declare const __VERSION__: string;
 const VERSION = typeof __VERSION__ === "string" ? __VERSION__ : "dev";
 
 // The page accepts only this version. Bump it when a running server should show the update banner until it starts again.
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 
 const MAX_FRAME = 64 * 1024;
 

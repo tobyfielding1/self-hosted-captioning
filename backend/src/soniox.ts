@@ -113,6 +113,14 @@ export interface SonioxError {
 export interface StreamConfig {
   model: string;
   targetLanguage?: string;
+  /** Longest wait after speech stops, 500–3000. */
+  endpointDelayMs?: number;
+  /** How readily a pause counts, -1 to 1. */
+  endpointSensitivity?: number;
+  /** How soon a pause can end a line, 0 to 3. */
+  endpointLatency?: number;
+  /** When false, Soniox is not asked to detect pauses. */
+  endpointDetection?: boolean;
 }
 
 /**
@@ -139,7 +147,10 @@ export class SonioxStream extends EventEmitter {
           audio_format: "pcm_s16le",
           sample_rate: 16000,
           num_channels: 1,
-          enable_endpoint_detection: true,
+          enable_endpoint_detection: config.endpointDetection !== false,
+          endpoint_latency_adjustment_level: config.endpointLatency ?? 0,
+          endpoint_sensitivity: config.endpointSensitivity ?? 0,
+          max_endpoint_delay_ms: config.endpointDelayMs ?? 2000,
           ...(config.targetLanguage
             ? { translation: { type: "one_way", target_language: config.targetLanguage } }
             : {}),

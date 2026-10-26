@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { Caption, Pairs, endsSentence, type PairLine } from "./captions.js";
+import { Caption, Pairs, type PairLine } from "./captions.js";
 import type { Catalog, Via } from "./catalog.js";
 import * as log from "./log.js";
 import { describeError, SonioxStream, wsUrl, type SonioxError, type SonioxToken } from "./soniox.js";
@@ -31,8 +31,6 @@ interface Room {
   listeners: Set<WebSocket>;
   caption: Caption;
   pairs: Pairs;
-  /** Sentence sent to Google whose translation has not come back yet. */
-  holding: string;
   chain: Promise<void>;
 }
 
@@ -46,6 +44,52 @@ export interface HubOptions {
 
 const base = (code?: string) => (code ?? "").toLowerCase().split(/[-_]/)[0];
 const isMarker = (text: string) => /^<[a-z]+>$/.test(text);
+
+/** Soniox pause settings. The desk's silence timer is separate and is not derived from these. */
+const ENDPOINT = {
+  delay: { min: 500, max: 3000, default: 2000 },
+  sensitivity: { min: -1, max: 1, default: 0 },
+  latency: { min: 0, max: 3, default: 0 },
+};
+const clampDelay = (ms: number) =>
+  Number.isFinite(ms) ? Math.min(ENDPOINT.delay.max, Math.max(ENDPOINT.delay.min, Math.round(ms))) : ENDPOINT.delay.default;
+const clampSensitivity = (n: number) =>
+  Number.isFinite(n) ? Math.round(Math.min(ENDPOINT.sensitivity.max, Math.max(ENDPOINT.sensitivity.min, n)) * 10) / 10 : ENDPOINT.sensitivity.default;
+const clampLatency = (n: number) =>
+  Number.isFinite(n) ? Math.min(ENDPOINT.latency.max, Math.max(ENDPOINT.latency.min, Math.round(n))) : ENDPOINT.latency.default;
+
+interface PairChunk {
+  spokenFinal: string;
+  spokenPartial: string;
+  translationFinal: string;
+  translationPartial: string;
+  close: boolean;
+}
+
+/** Split a Soniox message on `<end>`, so words after the pause start the next pair. */
+function pairChunks(tokens: SonioxToken[]): PairChunk[] {
+  const chunks: PairChunk[] = [];
+  let cur: PairChunk = { spokenFinal: "", spokenPartial: "", translationFinal: "", translationPartial: "", close: false };
+  const push = (close: boolean) => {
+    cur.close = close;
+    chunks.push(cur);
+    cur = { spokenFinal: "", spokenPartial: "", translationFinal: "", translationPartial: "", close: false };
+  };
+  for (const t of tokens) {
+    if (isMarker(t.text)) {
+      if ((t.text === "<end>" || t.text === "<fin>") && t.is_final) push(true);
+      continue;
+    }
+    const translation = t.translation_status === "translation";
+    if (translation) {
+      if (t.is_final) cur.translationFinal += t.text;
+      else cur.translationPartial += t.text;
+    } else if (t.is_final) cur.spokenFinal += t.text;
+    else cur.spokenPartial += t.text;
+  }
+  if (cur.spokenFinal || cur.spokenPartial || cur.translationFinal || cur.translationPartial) chunks.push(cur);
+  return chunks;
+}
 
 function send(ws: WebSocket | null, msg: unknown) {
   if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
@@ -84,6 +128,12 @@ export class Hub {
   private preview = new Caption();
   private pending = { text: "", langs: new Map<string, number>() };
   private spokenPartial = "";
+  private endpoint = {
+    delayMs: ENDPOINT.delay.default,
+    sensitivity: ENDPOINT.sensitivity.default,
+    latency: ENDPOINT.latency.default,
+    enabled: true,
+  };
   private withOriginal = new Set<WebSocket>();
   private timers: NodeJS.Timeout[];
   private timing: Timing;
@@ -130,7 +180,7 @@ export class Hub {
   }
 
   private onSpeakerMessage(text: string) {
-    let msg: { type?: string; paused?: boolean };
+    let msg: { type?: string; paused?: boolean; delayMs?: number; sensitivity?: number; latency?: number; enabled?: boolean };
     try {
       msg = JSON.parse(text);
     } catch {
@@ -138,6 +188,13 @@ export class Hub {
     }
     if (msg.type === "stop") this.endSession("stopped");
     else if (msg.type === "pause") this.setPaused(!!msg.paused);
+    else if (msg.type === "endpoint")
+      this.endpoint = {
+        delayMs: clampDelay(Number(msg.delayMs)),
+        sensitivity: clampSensitivity(Number(msg.sensitivity)),
+        latency: clampLatency(Number(msg.latency)),
+        enabled: msg.enabled === undefined ? this.endpoint.enabled : Boolean(msg.enabled),
+      };
     else if (msg.type === "test") {
       this.testUntil = Date.now() + this.timing.testMs;
       this.sendStats();
@@ -204,7 +261,7 @@ export class Hub {
     }
     let room = this.rooms.get(code);
     if (!room) {
-      room = { code, via, listeners: new Set(), caption: new Caption(), pairs: new Pairs(), holding: "", chain: Promise.resolve() };
+      room = { code, via, listeners: new Set(), caption: new Caption(), pairs: new Pairs(), chain: Promise.resolve() };
       this.rooms.set(code, room);
     }
     const bilingual = withOriginal && via !== "original";
@@ -273,6 +330,10 @@ export class Hub {
     const stream = new SonioxStream(wsUrl(catalog.sonioxRegion ?? ""), this.opts.key, {
       model: catalog.model,
       targetLanguage: key === ORIGINAL ? undefined : key,
+      endpointDelayMs: this.endpoint.delayMs,
+      endpointSensitivity: this.endpoint.sensitivity,
+      endpointLatency: this.endpoint.latency,
+      endpointDetection: this.endpoint.enabled,
     });
     this.streams.set(key, stream);
     log.info("stream opened", { lang: key });
@@ -339,8 +400,8 @@ export class Hub {
     }
 
     const room = this.rooms.get(key);
-    if (room && room.via !== "google") this.applyCaption(room, final, partial, isOriginal && endpoint);
-    if (room && room.via === "soniox") this.applyPairs(room, spokenFinal, spokenPartial, final, endpoint);
+    if (room && room.via !== "google") this.applyCaption(room, final, partial, endpoint);
+    if (room && room.via === "soniox") for (const chunk of pairChunks(tokens)) this.applyPairChunk(room, chunk);
 
     const previewSource = this.streams.has(ORIGINAL) ? ORIGINAL : this.streams.keys().next().value;
     if (key === previewSource) {
@@ -372,40 +433,47 @@ export class Hub {
     }
   }
 
-  /** Original speech from a Soniox translation stream, locked into a pair when the utterance ends. */
-  private applyPairs(room: Room, spokenFinal: string, spokenPartial: string, translationFinal: string, endpoint: boolean) {
-    room.pairs.partial = spokenPartial;
-    if (spokenFinal) room.pairs.addOriginal(spokenFinal);
-    const revised = translationFinal ? room.pairs.addTranslation(translationFinal) === "revise" : false;
-    const closed = endpoint ? room.pairs.close() : null;
+  /** One slice of a Soniox translation stream, closed when that slice ends on `<end>`. */
+  private applyPairChunk(room: Room, chunk: PairChunk) {
+    room.pairs.originalPartial = chunk.spokenPartial;
+    room.pairs.translationPartial = chunk.translationPartial;
+    if (chunk.spokenFinal) room.pairs.addOriginal(chunk.spokenFinal);
+    const revised = chunk.translationFinal ? room.pairs.addTranslation(chunk.translationFinal) === "revise" : false;
+    const closed = chunk.close ? room.pairs.close() : null;
     this.sendBilingual(room, revised, closed);
   }
 
-  private bilingualTail(room: Room): { original: string; translation: string; partial: string } {
+  private bilingualTail(room: Room): { original: string; translation: string; originalPartial: string; translationPartial: string } {
     if (room.via === "google") {
       return {
-        original: [room.holding, this.pending.text].filter((s) => s.trim()).join(" ").trim(),
+        original: this.pending.text.trim(),
         translation: "",
-        partial: this.spokenPartial.trim(),
+        originalPartial: this.spokenPartial.trim(),
+        translationPartial: "",
       };
     }
     const snap = room.pairs.snapshot();
-    return { original: snap.original, translation: snap.translation, partial: snap.partial };
+    return {
+      original: snap.original,
+      translation: snap.translation,
+      originalPartial: snap.originalPartial,
+      translationPartial: snap.translationPartial,
+    };
   }
 
-  private sendBilingual(room: Room, revised: boolean, closed: PairLine | null) {
+  private sendBilingual(room: Room, revised: boolean, closed: PairLine | null, fill = false) {
     const tail = this.bilingualTail(room);
     for (const ws of room.listeners) {
       if (!this.withOriginal.has(ws)) continue;
       if (revised) {
         const last = room.pairs.lines[room.pairs.lines.length - 1];
         if (last) send(ws, { type: "pair", ...last, revise: true });
-      } else if (closed) send(ws, { type: "pair", ...closed });
+      } else if (closed) send(ws, { type: "pair", ...closed, ...(fill ? { fill: true } : {}) });
       send(ws, { type: "bilingual", ...tail });
     }
   }
 
-  /** Google-only languages get whole sentences from the original stream, translated once each. */
+  /** Google languages share the original stream. Each pause is translated once, for every Google listener. */
   private feedGoogle(final: string, spokenPartial: string, langs: Map<string, number>, endpoint: boolean) {
     this.spokenPartial = spokenPartial;
     const rooms = [...this.rooms.values()].filter((r) => r.via === "google" && r.listeners.size > 0);
@@ -418,7 +486,7 @@ export class Hub {
 
     const text = this.pending.text.trim();
     const hasPartial = spokenPartial.length > 0;
-    const complete = text.length > 0 && (endpoint || endsSentence(text));
+    const complete = endpoint && text.length > 0;
     const waiting = complete ? hasPartial : text.length > 0 || hasPartial;
     for (const room of rooms) {
       if (room.caption.partial !== (waiting ? "…" : "")) {
@@ -428,15 +496,15 @@ export class Hub {
           send(ws, { type: "caption", current: room.caption.current.trimStart(), partial: room.caption.partial });
         }
       }
-      this.sendBilingual(room, false, null);
+      if (!complete) this.sendBilingual(room, false, null);
     }
     if (!complete) return;
 
     const source = [...this.pending.langs.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
     this.pending = { text: "", langs: new Map() };
     for (const room of rooms) {
-      room.holding = text;
-      this.sendBilingual(room, false, null);
+      const line = room.pairs.commit(text, "");
+      this.sendBilingual(room, false, line);
       room.chain = room.chain.then(() => this.translateInto(room, text, source));
     }
   }
@@ -450,10 +518,14 @@ export class Hub {
       this.recordError(`Google Translate failed for ${languageName(room.code)}: ${(e as Error).message}`);
       out = `${text} (translation unavailable)`;
     }
-    this.applyCaption(room, `${out} `, room.caption.partial, false);
-    const line = room.pairs.commit(text, out);
-    if (room.holding === text) room.holding = "";
-    this.sendBilingual(room, false, line);
+    this.applyCaption(room, `${out} `, room.caption.partial, true);
+    const waiting = room.pairs.lines.find((l) => l.original === text && !l.translation);
+    if (waiting) {
+      waiting.translation = out.trim();
+      this.sendBilingual(room, false, waiting, true);
+      return;
+    }
+    this.sendBilingual(room, false, room.pairs.commit(text, out));
   }
 
   // ------------------------------------------------------------ housekeeping
