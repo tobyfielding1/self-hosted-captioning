@@ -1,5 +1,5 @@
 export const ORIGINAL = "original";
-export const SUPPORTED_PROTOCOLS = [3];
+export const SUPPORTED_PROTOCOLS = [4];
 
 /** Which sound desk link last opened Share. This does not grant access. */
 const SEEN_TOKEN = "captioning.seenToken";

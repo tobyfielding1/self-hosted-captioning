@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { getBackend, getLanguages, getStatus, ORIGINAL, protocolSupported, siteRoot, wsUrl, type Languages } from "../backend";
 import { label, orderLanguages } from "../lib/languages";
 import { HomeLink, RepoLink } from "../ui";
@@ -32,63 +32,10 @@ interface CaptionState {
   partial: string;
 }
 
-interface PairLine {
-  original: string;
-  translation: string;
-}
+const EMPTY_CAPTION: CaptionState = { lines: [], current: "", partial: "" };
 
-interface BilingualState {
-  lines: PairLine[];
-  original: string;
-  translation: string;
-  originalPartial: string;
-  translationPartial: string;
-}
-
-const EMPTY_BILINGUAL: BilingualState = { lines: [], original: "", translation: "", originalPartial: "", translationPartial: "" };
-
-const provisional = "text-gray-400 dark:text-gray-300";
-
-function PairBlock({
-  original = "",
-  originalPartial = "",
-  translation = "",
-  translationPartial = "",
-}: {
-  original?: string;
-  originalPartial?: string;
-  translation?: string;
-  translationPartial?: string;
-}) {
-  if (!original && !originalPartial && !translation && !translationPartial) return null;
-  return (
-    <div>
-      {(original || originalPartial) && (
-        <p className="italic">
-          {original}
-          {original && originalPartial && " "}
-          {originalPartial && <span className={provisional}>{originalPartial}</span>}
-        </p>
-      )}
-      {(translation || translationPartial) && (
-        <p className="font-bold">
-          {translation}
-          {translation && translationPartial && " "}
-          {translationPartial && <span className={provisional}>{translationPartial}</span>}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function readBilingual(msg: { lines?: PairLine[]; original?: string; translation?: string; originalPartial?: string; translationPartial?: string; partial?: string }): BilingualState {
-  return {
-    lines: msg.lines ?? [],
-    original: msg.original ?? "",
-    translation: msg.translation ?? "",
-    originalPartial: msg.originalPartial ?? msg.partial ?? "",
-    translationPartial: msg.translationPartial ?? "",
-  };
+function readCaption(msg: { lines?: string[]; current?: string; partial?: string }): CaptionState {
+  return { lines: msg.lines ?? [], current: msg.current ?? "", partial: msg.partial ?? "" };
 }
 
 export default function ListenView() {
@@ -97,10 +44,10 @@ export default function ListenView() {
   const [choosing, setChoosing] = useState(() => !langFromUrl());
   const [languages, setLanguages] = useState<Languages | null>(null);
   const [phase, setPhase] = useState<Phase>("checking");
-  const [caption, setCaption] = useState<CaptionState>({ lines: [], current: "", partial: "" });
+  const [caption, setCaption] = useState<CaptionState>(EMPTY_CAPTION);
   const [withOriginal, setWithOriginal] = useState(() => localStorage.getItem(STORE.original) === "1");
   const [paired, setPaired] = useState(false);
-  const [bilingual, setBilingual] = useState<BilingualState>(EMPTY_BILINGUAL);
+  const [original, setOriginal] = useState<CaptionState>(EMPTY_CAPTION);
   const [paused, setPaused] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [size, setSize] = useState(() => Number(localStorage.getItem(STORE.size) ?? 3));
@@ -109,6 +56,7 @@ export default function ListenView() {
   const [attempt, setAttempt] = useState(0);
   const [venue, setVenue] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const originalScroller = useRef<HTMLDivElement>(null);
 
   useWakeLock(phase === "live");
 
@@ -196,32 +144,17 @@ export default function ListenView() {
           case "hello":
             setPaused(msg.paused);
             setPaired(!!msg.bilingual);
-            if (!msg.bilingual) setBilingual(EMPTY_BILINGUAL);
+            if (!msg.bilingual) setOriginal(EMPTY_CAPTION);
             break;
           case "history":
-            if (msg.bilingual) {
+            setCaption(readCaption(msg));
+            if (msg.original) {
               setPaired(true);
-              setBilingual(readBilingual(msg));
-            } else setCaption({ lines: msg.lines, current: msg.current, partial: msg.partial });
+              setOriginal(readCaption(msg.original));
+            }
             break;
-          case "pair":
-            setBilingual((b) => {
-              const line = { original: msg.original ?? "", translation: msg.translation ?? "" };
-              if (msg.fill) {
-                const idx = b.lines.findIndex((l) => l.original === line.original && !l.translation);
-                if (idx >= 0) {
-                  const lines = b.lines.slice();
-                  lines[idx] = line;
-                  return { ...b, lines };
-                }
-              }
-              const lines = msg.revise && b.lines.length ? b.lines.slice(0, -1) : b.lines;
-              return { ...b, lines: [...lines, line].slice(-MAX_LINES) };
-            });
-            setNotice(null);
-            break;
-          case "bilingual":
-            setBilingual((b) => ({ ...b, ...readBilingual(msg), lines: b.lines }));
+          case "original":
+            setOriginal(readCaption(msg));
             setNotice(null);
             break;
           case "line":
@@ -269,8 +202,8 @@ export default function ListenView() {
     document.addEventListener("visibilitychange", onVisible);
     setPhase("checking");
     setPaired(false);
-    setBilingual(EMPTY_BILINGUAL);
-    setCaption({ lines: [], current: "", partial: "" });
+    setOriginal(EMPTY_CAPTION);
+    setCaption(EMPTY_CAPTION);
     void check();
 
     return () => {
@@ -283,20 +216,20 @@ export default function ListenView() {
 
   // Keep the newest line in view unless the reader has scrolled back.
   useLayoutEffect(() => {
-    const el = scroller.current;
-    if (el && follow) el.scrollTop = el.scrollHeight;
-  }, [caption, bilingual, follow, size]);
+    for (const el of [originalScroller.current, scroller.current]) {
+      if (el && follow) el.scrollTop = el.scrollHeight;
+    }
+  }, [caption, original, follow, size]);
 
-  const onScroll = () => {
-    const el = scroller.current;
-    if (!el) return;
+  const onScroll = (event: UIEvent<HTMLDivElement>) => {
+    const el = event.currentTarget;
     setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 60);
   };
 
   const choose = (code: string) => {
     rememberLang(code);
-    setCaption({ lines: [], current: "", partial: "" });
-    setBilingual(EMPTY_BILINGUAL);
+    setCaption(EMPTY_CAPTION);
+    setOriginal(EMPTY_CAPTION);
     setPaired(false);
     setLang(code);
     setChoosing(false);
@@ -317,10 +250,9 @@ export default function ListenView() {
 
   if (choosing) return <LanguageChooser languages={languages} current={lang ?? localStorage.getItem(STORE.lang)} venue={venue} onChoose={choose} dark={dark} />;
 
-  const showPairs = paired && lang !== ORIGINAL;
-  const empty = showPairs
-    ? !bilingual.lines.length && !bilingual.original && !bilingual.translation && !bilingual.originalPartial && !bilingual.translationPartial
-    : !caption.lines.length && !caption.current && !caption.partial;
+  const showBoth = paired && lang !== ORIGINAL;
+  const blank = (c: CaptionState) => !c.lines.length && !c.current && !c.partial;
+  const empty = showBoth ? blank(caption) && blank(original) : blank(caption);
   let message: string | null = null;
   if (phase === "checking") message = "Connecting...";
   else if (phase === "waiting") message = "Waiting for captions to start. This page will connect by itself.";
@@ -354,7 +286,7 @@ export default function ListenView() {
             <button
               type="button"
               aria-pressed={withOriginal}
-              title="Show the original above the translation"
+              title="Show the original as well"
               onClick={() => setWithOriginal((v) => !v)}
               className={`h-11 shrink-0 rounded-lg border px-3 text-base font-semibold ${
                 withOriginal
@@ -384,43 +316,22 @@ export default function ListenView() {
         </div>
       </header>
 
-      <div ref={scroller} onScroll={onScroll} className="font-caption flex-1 overflow-y-auto px-5 py-4" style={{ fontSize: SIZES[size], lineHeight: 1.35 }}>
-        {showPairs ? (
-          <div aria-live="polite" aria-relevant="additions" className="space-y-4">
-            {bilingual.lines.map((line, i) => (
-              <PairBlock key={i} original={line.original} translation={line.translation} />
-            ))}
-            <PairBlock
-              original={bilingual.original}
-              originalPartial={bilingual.originalPartial}
-              translation={bilingual.translation}
-              translationPartial={bilingual.translationPartial}
-            />
+      {showBoth ? (
+        <div className="font-caption flex min-h-0 flex-1 flex-col" style={{ fontSize: SIZES[size], lineHeight: 1.35 }}>
+          <div ref={originalScroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto border-b border-purple/30 px-5 py-4 dark:border-white/15">
+            <Transcript caption={original} />
           </div>
-        ) : (
-          <>
-            <div aria-live="polite" aria-relevant="additions" className="space-y-3">
-              {caption.lines.map((line, i) => (
-                <p key={i}>{line}</p>
-              ))}
-            </div>
-            {(caption.current || caption.partial) && (
-              <p className="mt-3">
-                {caption.current}
-                {caption.current && caption.partial && " "}
-                <span className="text-gray-400 dark:text-gray-300">{caption.partial}</span>
-              </p>
-            )}
-          </>
-        )}
-        {notice && <p className="mt-4 text-base text-amber-700 dark:text-amber-400">{notice}</p>}
-        {message && <p className={`mt-6 ${empty ? "" : "text-base"} text-gray-500`}>{message}</p>}
-        {(phase === "ended" || phase === "gave-up") && (
-          <button onClick={() => setAttempt((a) => a + 1)} className="mt-4 text-base underline text-blue-600 hover:text-blue-800 dark:text-blue-300">
-            Check again
-          </button>
-        )}
-      </div>
+          <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <Transcript caption={caption} />
+            <StatusNote notice={notice} message={message} empty={empty} phase={phase} onRetry={() => setAttempt((a) => a + 1)} />
+          </div>
+        </div>
+      ) : (
+        <div ref={scroller} onScroll={onScroll} className="font-caption flex-1 overflow-y-auto px-5 py-4" style={{ fontSize: SIZES[size], lineHeight: 1.35 }}>
+          <Transcript caption={caption} />
+          <StatusNote notice={notice} message={message} empty={empty} phase={phase} onRetry={() => setAttempt((a) => a + 1)} />
+        </div>
+      )}
 
       {!follow && (
         <button
@@ -435,6 +346,52 @@ export default function ListenView() {
         Audio is not recorded or stored. Captions are machine-generated.
       </footer>
     </Shell>
+  );
+}
+
+function Transcript({ caption }: { caption: CaptionState }) {
+  if (!caption.lines.length && !caption.current && !caption.partial) return null;
+  return (
+    <div aria-live="polite" aria-relevant="additions">
+      {caption.lines.map((line, i) => (
+        <p key={i} className="mt-3">
+          {line}
+        </p>
+      ))}
+      {(caption.current || caption.partial) && (
+        <p className="mt-3">
+          {caption.current}
+          {caption.current && caption.partial && !caption.current.endsWith(" ") && " "}
+          {caption.partial && <span className="text-gray-400 dark:text-gray-300">{caption.partial}</span>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function StatusNote({
+  notice,
+  message,
+  empty,
+  phase,
+  onRetry,
+}: {
+  notice: string | null;
+  message: string | null;
+  empty: boolean;
+  phase: Phase;
+  onRetry: () => void;
+}) {
+  return (
+    <>
+      {notice && <p className="mt-4 text-base text-amber-700 dark:text-amber-400">{notice}</p>}
+      {message && <p className={`mt-6 ${empty ? "" : "text-base"} text-gray-500`}>{message}</p>}
+      {(phase === "ended" || phase === "gave-up") && (
+        <button onClick={onRetry} className="mt-4 text-base underline text-blue-600 hover:text-blue-800 dark:text-blue-300">
+          Check again
+        </button>
+      )}
+    </>
   );
 }
 

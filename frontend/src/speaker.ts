@@ -33,7 +33,6 @@ export class SpeakerConnection {
   private retry = 0;
   private timer?: ReturnType<typeof setTimeout>;
   private testOnOpen = false;
-  endpoint = { delayMs: 2000, sensitivity: 0, latency: 0, enabled: true };
 
   constructor(
     private onState: (s: ConnState) => void,
@@ -66,7 +65,6 @@ export class SpeakerConnection {
     ws.onopen = () => {
       this.retry = 0;
       this.setState("live");
-      this.send({ type: "endpoint", ...this.endpoint });
       if (this.testOnOpen) {
         this.testOnOpen = false;
         this.send({ type: "test" });
