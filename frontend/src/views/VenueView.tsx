@@ -2,24 +2,20 @@ import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { audioSupported, guessMode, listInputs, startCapture, type Capture, type InputMode } from "../audio/capture";
 import {
-  calibrate,
   clampEndpointDelay,
   clampEndpointLatency,
   clampEndpointSensitivity,
   clampSendAfter,
-  DEFAULT_THRESHOLD,
   ENDPOINT_DELAY,
   ENDPOINT_LATENCY,
   ENDPOINT_SENSITIVITY,
   SEND_AFTER,
-  FRAME_MS,
-  Gate,
-  MAX_THRESHOLD,
-  MIN_THRESHOLD,
 } from "../audio/gate";
 import { checkDeskAccess, getBackend, getStatus, getToken, listenerLink, protocolSupported, siteRoot, speakLink, type DeskAccess, type Status } from "../backend";
 import { englishName } from "../lib/languages";
 import { useWakeLock, wakeLockSupported } from "../lib/wakeLock";
+import { createDeskGate } from "../audio/speech-model";
+import type { SpeechGate } from "../audio/speech";
 import { SpeakerConnection, type ConnState, type Preview, type ServerMessage, type Stats } from "../speaker";
 import { Banner, Button, Card, copyText, Details, RepoLink } from "../ui";
 
@@ -99,12 +95,11 @@ function DeskGate({ access }: { access: "checking" | "down" | "bad" }) {
 
 // ----------------------------------------------------------------------------- sound desk
 
-const LEVEL_HISTORY = 10_000 / FRAME_MS;
-const CALIBRATE_FRAMES = 3_000 / FRAME_MS;
+const METER_MAX = 0.1;
+const METER_HEARD = 0.01;
 const STORE = {
   input: "captioning.input",
   mode: (id: string) => `captioning.mode.${id || "default"}`,
-  threshold: "captioning.threshold",
   endpoint: "captioning.endpointDelay",
   sensitivity: "captioning.endpointSensitivity",
   latency: "captioning.endpointLatency",
@@ -141,11 +136,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
   const [mode, setMode] = useState<InputMode | null>(null);
   const [mic, setMic] = useState<MicState>("idle");
   const [level, setLevel] = useState(0);
-  const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
-  const [manualThreshold, setManualThreshold] = useState<number | null>(() => {
-    const v = localStorage.getItem(STORE.threshold);
-    return v ? Number(v) : null;
-  });
+  const [speech, setSpeech] = useState<"loading" | "ready" | "failed">("loading");
   const [endpointDelay, setEndpointDelay] = useState(() => {
     const saved = localStorage.getItem(STORE.endpoint);
     return saved === null ? ENDPOINT_DELAY.default : clampEndpointDelay(Number(saved));
@@ -173,15 +164,34 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
   const [copied, setCopied] = useState(false);
 
   const captureRef = useRef<Capture | null>(null);
-  const gateRef = useRef(new Gate());
-  const levelsRef = useRef<number[]>([]);
+  const gateRef = useRef<SpeechGate | null>(null);
+  const audioChain = useRef(Promise.resolve());
   const levelRef = useRef(0);
   const lastHeardRef = useRef(0);
-  const calibrateAtRef = useRef<number | null>(null);
   const connRef = useRef<SpeakerConnection | null>(null);
 
   const live = conn !== "off";
   const wakeLock = useWakeLock(live);
+
+  useEffect(() => {
+    let gone = false;
+    const created = createDeskGate(clampSendAfter(sendAfter));
+    gateRef.current = created.gate;
+    created.ready.then(
+      () => {
+        if (!gone) setSpeech("ready");
+      },
+      () => {
+        if (!gone) setSpeech("failed");
+      },
+    );
+    return () => {
+      gone = true;
+      gateRef.current = null;
+    };
+    // The model is loaded once. Later changes to the hangover update the gate directly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Watch whether another sound desk is connected, while this tab is visible and not yet live.
   useEffect(() => {
@@ -239,19 +249,16 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
 
   const onFrame = useCallback((pcm: ArrayBuffer, rms: number) => {
     levelRef.current = rms;
-    const levels = levelsRef.current;
-    levels.push(rms);
-    if (levels.length > LEVEL_HISTORY) levels.shift();
-    const gate = gateRef.current;
-    if (calibrateAtRef.current !== null && levels.length >= calibrateAtRef.current) {
-      calibrateAtRef.current = null;
-      gate.threshold = calibrate(levels.slice(-CALIBRATE_FRAMES));
-      setThreshold(gate.threshold);
-    }
-    if (rms >= gate.threshold) lastHeardRef.current = performance.now();
-    const connection = connRef.current!;
-    if (connection.state !== "live") return;
-    for (const frame of gate.push(pcm, rms)) connection.sendAudio(frame);
+    if (rms >= METER_HEARD) lastHeardRef.current = performance.now();
+    const samples = new Uint8Array(pcm);
+    audioChain.current = audioChain.current.then(async () => {
+      const gate = gateRef.current;
+      if (!gate) return;
+      const decision = await gate.push(samples);
+      const connection = connRef.current;
+      if (!connection || connection.state !== "live") return;
+      for (const frame of decision.forward) connection.sendAudio(frame.slice().buffer);
+    }).catch(() => setSpeech("failed"));
   }, []);
 
   // Level meter at ~10 fps.
@@ -345,11 +352,10 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
     setNotice(null);
     setShownError(null);
     const gate = gateRef.current;
-    if (manualThreshold !== null) gate.threshold = manualThreshold;
-    else if (levelsRef.current.length >= CALIBRATE_FRAMES) gate.threshold = calibrate(levelsRef.current.slice(-CALIBRATE_FRAMES));
-    else calibrateAtRef.current = levelsRef.current.length + CALIBRATE_FRAMES;
-    setThreshold(gate.threshold);
-    gate.hangoverMs = clampSendAfter(sendAfter);
+    if (gate) {
+      gate.hangoverMs = clampSendAfter(sendAfter);
+      if (!live) gate.reset();
+    }
     connRef.current!.endpoint = {
       delayMs: clampEndpointDelay(endpointDelay),
       sensitivity: clampEndpointSensitivity(endpointSensitivity),
@@ -365,16 +371,6 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
     setPreview(null);
   };
 
-  const setManual = (v: number | null) => {
-    setManualThreshold(v);
-    if (v === null) localStorage.removeItem(STORE.threshold);
-    else {
-      localStorage.setItem(STORE.threshold, String(v));
-      gateRef.current.threshold = v;
-      setThreshold(v);
-    }
-  };
-
   const copyDiagnostics = async () => {
     const c = captureRef.current;
     const report = {
@@ -385,7 +381,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
       stats,
       connection: conn,
       errors,
-      audio: { input: c?.label, sampleRate: c?.sampleRate, mode, threshold, mic },
+      audio: { input: c?.label, sampleRate: c?.sampleRate, mode, mic },
       browser: navigator.userAgent,
       wakeLock: wakeLockSupported(),
     };
@@ -408,8 +404,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
   }
 
   const heard = performance.now() - lastHeardRef.current < 600;
-  const meterPct = Math.min(100, Math.sqrt(level / MAX_THRESHOLD) * 100);
-  const thresholdPct = Math.min(100, Math.sqrt(threshold / MAX_THRESHOLD) * 100);
+  const meterPct = Math.min(100, Math.sqrt(level / METER_MAX) * 100);
   const listenersText = stats ? describeListeners(stats.listeners) : "";
 
   let headline = "Not live";
@@ -482,7 +477,6 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
                   className={`h-full transition-[width] duration-100 ${heard ? "bg-green-600" : "bg-gray-400"}`}
                   style={{ width: `${meterPct}%` }}
                 />
-                <div className="absolute top-0 bottom-0 w-0.5 bg-gray-800" style={{ left: `${thresholdPct}%` }} />
               </div>
               <p className="mt-2 text-lg font-semibold" aria-live="polite">
                 {heard ? "We can hear you" : "Quiet: speak and check the bar moves"}
@@ -504,13 +498,16 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
           </Banner>
         )}
 
+        {speech === "loading" && <p>Preparing speech detection...</p>}
+        {speech === "failed" && <Banner tone="error">Speech detection didn't load. Reload the page.</Banner>}
+
         <div className="flex flex-wrap gap-3">
           {!live ? (
             <>
-              <Button big disabled={mic !== "on"} onClick={() => start()}>
+              <Button big disabled={mic !== "on" || speech !== "ready"} onClick={() => start()}>
                 Start
               </Button>
-              <Button big variant="secondary" disabled={mic !== "on"} onClick={() => start(true)}>
+              <Button big variant="secondary" disabled={mic !== "on" || speech !== "ready"} onClick={() => start(true)}>
                 Test captions
               </Button>
             </>
@@ -561,25 +558,6 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
             </label>
           ))}
         </fieldset>
-        <div>
-          <label className="flex items-center gap-2 font-semibold">
-            <input type="checkbox" checked={manualThreshold === null} onChange={(e) => setManual(e.target.checked ? null : threshold)} />
-            Set the silence level automatically
-          </label>
-          {manualThreshold !== null && (
-            <input
-              type="range"
-              className="w-full"
-              min={Math.log(MIN_THRESHOLD)}
-              max={Math.log(MAX_THRESHOLD)}
-              step={0.01}
-              value={Math.log(manualThreshold)}
-              onChange={(e) => setManual(Math.exp(Number(e.target.value)))}
-              aria-label="Silence level"
-            />
-          )}
-          <p className="text-sm text-gray-600">Sound below the line on the meter isn't sent.</p>
-        </div>
         <div className="space-y-3">
           <label className="flex items-center gap-2 font-semibold">
             <input
@@ -651,7 +629,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
           </div>
           <div>
             <label className="font-semibold" htmlFor="send-after">
-              Keep sending after the sound drops: {durationLabel(sendAfter)}
+              Keep sending after speech stops: {durationLabel(sendAfter)}
             </label>
             <input
               id="send-after"
@@ -665,11 +643,12 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
                 const ms = clampSendAfter(Number(e.target.value));
                 setSendAfter(ms);
                 localStorage.setItem(STORE.sendAfter, String(ms));
+                if (gateRef.current) gateRef.current.hangoverMs = ms;
               }}
             />
           </div>
           <p className="text-sm text-gray-600">
-            A pause ends the line and sends it for translation. How long audio keeps going after the sound drops is its own setting. Both take effect the next time you press Start.
+            A pause ends the line and sends it for translation. Those settings take effect the next time you press Start. Audio keeps going for a moment after speech stops, so the pause is still sent.
           </p>
         </div>
         <p className="text-sm text-gray-600 break-all">
