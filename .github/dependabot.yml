@@ -8,7 +8,7 @@ updates:
       backend:
         patterns: ["*"]
     ignore:
-      # Types must match the Node major frozen into venue images (Dockerfile node:24).
+      # Types must match the Node 24 runtime the install requests (nodejs24).
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
   - package-ecosystem: npm

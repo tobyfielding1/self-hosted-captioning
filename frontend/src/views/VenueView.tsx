@@ -1,7 +1,7 @@
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { checkDeskAccess, getBackend, getStatus, getToken, listenerLink, protocolSupported, siteRoot, speakLink, type DeskAccess, type Status } from "../backend";
-import { Banner, Button, Card, copyText, Details } from "../ui";
+import { Banner, Button, Card, copyText, Details, RepoLink } from "../ui";
 import SpeakView from "./SpeakView";
 
 const SONIOX_USAGE = "https://console.soniox.com/org/projects/usage/cost";
@@ -105,7 +105,10 @@ function DeskGate({ access }: { access: "checking" | "down" | "bad" }) {
 function Intro() {
   return (
     <>
-      <h1 className="text-3xl font-bold text-midnight">Live captions</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold text-midnight">Live captions</h1>
+        <RepoLink />
+      </div>
       <p className="text-lg">
         Self-hosted captioning allows a venue to host a translation server on Google Cloud so the audience can read what is being spoken on their mobile devices in their own language. Self-hosting makes it extremely low cost for the venue.
       </p>
@@ -232,6 +235,12 @@ function Finished({
         <a className="inline-block underline text-blue-600 hover:text-blue-800" href={listen} target="_blank" rel="noreferrer">
           Open the audience view
         </a>
+        <div className="flex items-center justify-between gap-4 pt-3">
+          <a className="underline text-blue-600 hover:text-blue-800" href={siteRoot()}>
+            Live captions
+          </a>
+          <RepoLink />
+        </div>
       </Details>
 
       <Spending status={status} />
@@ -304,9 +313,8 @@ function googleProjectUrl(project: string) {
   return `https://console.cloud.google.com/home/dashboard?project=${encodeURIComponent(project)}`;
 }
 
-/** The project's linked billing account. Reports, grouped by service, splits the charges. */
-function googleBillingUrl(project: string) {
-  return `https://console.cloud.google.com/billing/linkedaccount?project=${encodeURIComponent(project)}`;
+function googleBillingReportsUrl(account: string) {
+  return `https://console.cloud.google.com/billing/${encodeURIComponent(account)}/reports`;
 }
 
 function googleServerUrl(project: string, region: string) {
@@ -315,6 +323,7 @@ function googleServerUrl(project: string, region: string) {
 
 function Spending({ status }: { status: Status | null | undefined }) {
   const project = status?.project;
+  const account = status?.billingAccount;
   return (
     <Details summary="Spending">
       <p>
@@ -338,9 +347,15 @@ function Spending({ status }: { status: Status | null | undefined }) {
         {project ? (
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              <ExtLink href={googleBillingUrl(project)}>Spending for this project</ExtLink> — then open Reports and group
-              by Service. Cloud Run is the server; Cloud Translation is the extra languages. Figures usually appear the
-              next day. The project is {project}.
+              {account ? (
+                <ExtLink href={googleBillingReportsUrl(account)}>Spending on this billing account</ExtLink>
+              ) : (
+                <ExtLink href={`https://console.cloud.google.com/billing/linkedaccount?project=${encodeURIComponent(project)}`}>
+                  Spending for this project
+                </ExtLink>
+              )}{" "}
+              — Reports, grouped by Service. Cloud Run is the server; Cloud Translation is the extra languages. Figures
+              usually appear the next day.
             </li>
             <li>
               <ExtLink href={googleProjectUrl(project)}>Open the project</ExtLink>

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getBackend, getLanguages, getStatus, ORIGINAL, protocolSupported, siteRoot, wsUrl, type Languages } from "../backend";
 import { label, orderLanguages } from "../lib/languages";
+import { RepoLink } from "../ui";
 import { useWakeLock } from "../lib/wakeLock";
 
 type Phase = "checking" | "waiting" | "live" | "reconnecting" | "ended" | "gave-up" | "outdated" | "unsupported";
@@ -416,6 +417,12 @@ function LanguageChooser({
             </li>
           ))}
         </ul>
+        <div className="flex items-center justify-between gap-4">
+          <a className="underline text-blue-600 hover:text-blue-800" href={siteRoot()}>
+            Live captions
+          </a>
+          <RepoLink />
+        </div>
       </div>
     </Shell>
   );

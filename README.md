@@ -45,6 +45,7 @@ Rollback: run the **release** workflow manually with `ref` set to an older commi
 
 ## Things that are deliberately frozen
 
-Venue images are built once and never rebuilt, so `backend/boot.mjs`, the environment variables
-(`PORT`, `SONIOX_API_KEY`, `SONIOX_REGION`, `SPEAKER_TOKEN`, `BILLING_ACCOUNT`, `AUTO_UPDATE`) and the Node major version
-(24) must stay compatible. Bumping Node means venues re-run the install.
+The app layer is built once per venue. `backend/boot.mjs` and the environment variables
+(`PORT`, `SONIOX_API_KEY`, `SONIOX_REGION`, `SPEAKER_TOKEN`, `BILLING_ACCOUNT`, `AUTO_UPDATE`, `VENUE_NAME`)
+must stay compatible. Cloud Run patches the Node 24 runtime and operating system on its own.
+Moving to another Node major means venues re-run the install.

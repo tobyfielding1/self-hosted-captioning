@@ -419,8 +419,11 @@ background() {
   step "Building the captioning server (about 3 minutes)"
   local attempt=0
   while :; do
+    # No Dockerfile: Cloud Run builds with its Node 24 image and patches that image later.
     if gcloud run deploy "$SERVICE" \
       --source backend \
+      --base-image nodejs24 \
+      --automatic-updates \
       --region "$REGION" \
       --allow-unauthenticated \
       --max-instances=1 --min-instances=0 \

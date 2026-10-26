@@ -3,13 +3,15 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": "24.x.x"
   },
   "scripts": {
     "dev": "SPEAKER_TOKEN=${SPEAKER_TOKEN:-dev} tsx watch src/dev.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "bundle": "esbuild src/server.ts --bundle --platform=node --format=esm --target=node24 --external:bufferutil --external:utf-8-validate --define:__VERSION__=\\\"${VERSION:-bundled}\\\" --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=server.mjs"
+    "bundle": "esbuild src/server.ts --bundle --platform=node --format=esm --target=node24 --external:bufferutil --external:utf-8-validate --define:__VERSION__=\\\"${VERSION:-bundled}\\\" --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=server.mjs",
+    "gcp-build": "npm run bundle",
+    "start": "node boot.mjs"
   },
   "dependencies": {
     "ws": "^8.18.3"
