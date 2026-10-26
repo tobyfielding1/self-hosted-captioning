@@ -127,8 +127,8 @@ const speaker = async (token = "secret") => {
   clients.push(c);
   return c;
 };
-const listener = (lang: string) => {
-  const c = new Client(`ws://127.0.0.1:${app.port}/ws/listen?lang=${lang}`);
+const listener = (lang: string, withOriginal = false) => {
+  const c = new Client(`ws://127.0.0.1:${app.port}/ws/listen?lang=${lang}${withOriginal ? "&original=1" : ""}`);
   clients.push(c);
   return c;
 };
@@ -237,6 +237,22 @@ describe("cost guard", () => {
     expect(soniox.sessions[0].config.model).toBe("stt-rt-v4");
     const caption = await b.waitFor((m) => m.type === "caption" && m.current.includes("[es] Hola."));
     expect(caption.current).not.toContain("Hello");
+  });
+
+  it("puts the original above the translation when a listener asks for it", async () => {
+    const s = await speaker();
+    await s.opened();
+    const a = listener("es", true);
+    await a.opened();
+    expect((await a.waitFor((m) => m.type === "hello")).bilingual).toBe(true);
+    s.ws.send(FRAME);
+    const pair = await a.waitFor((m) => m.type === "pair");
+    expect(pair.original).toBe("Hello there.");
+    expect(pair.translation).toContain("Hola.");
+    expect(pair.original).not.toContain("Hola");
+    const tail = await a.waitFor((m) => m.type === "bilingual" && String(m.partial).includes("and"));
+    expect(tail.translation).toBe("");
+    expect(soniox.sessions).toHaveLength(1);
   });
 
   it("closes the stream when the last listener leaves", async () => {
@@ -382,6 +398,18 @@ describe("google fallback", () => {
     expect(translations[0]).toBe("en->haw:Hello there.");
     expect(soniox.sessions).toHaveLength(1);
     expect(soniox.sessions[0].config.translation).toBeUndefined();
+  });
+
+  it("pairs a Google sentence with the original when asked", async () => {
+    const s = await speaker();
+    await s.opened();
+    const a = listener("haw", true);
+    await a.opened();
+    s.ws.send(FRAME);
+    const pair = await a.waitFor((m) => m.type === "pair");
+    expect(pair.original).toBe("Hello there.");
+    expect(pair.translation).toContain("[haw] Hello there.");
+    expect(soniox.sessions).toHaveLength(1);
   });
 
   it("sends history to late joiners", async () => {

@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { Caption, endsSentence } from "./captions.js";
+import { Caption, Pairs, endsSentence, type PairLine } from "./captions.js";
 import type { Catalog, Via } from "./catalog.js";
 import * as log from "./log.js";
 import { describeError, SonioxStream, wsUrl, type SonioxError, type SonioxToken } from "./soniox.js";
@@ -30,6 +30,9 @@ interface Room {
   via: Via | "original";
   listeners: Set<WebSocket>;
   caption: Caption;
+  pairs: Pairs;
+  /** Sentence sent to Google whose translation has not come back yet. */
+  holding: string;
   chain: Promise<void>;
 }
 
@@ -80,6 +83,8 @@ export class Hub {
   private backoff = new Map<string, { until: number; delay: number }>();
   private preview = new Caption();
   private pending = { text: "", langs: new Map<string, number>() };
+  private spokenPartial = "";
+  private withOriginal = new Set<WebSocket>();
   private timers: NodeJS.Timeout[];
   private timing: Timing;
 
@@ -179,13 +184,15 @@ export class Hub {
       }
     this.preview = new Caption();
     this.pending = { text: "", langs: new Map() };
+    this.spokenPartial = "";
+    this.withOriginal.clear();
     this.backoff.clear();
     if (wasLive) log.info("session ended", { reason });
   }
 
   // -------------------------------------------------------------- listeners
 
-  attachListener(ws: WebSocket, code: string) {
+  attachListener(ws: WebSocket, code: string, withOriginal = false) {
     if (!this.live) {
       ws.close(4404, "not-live");
       return;
@@ -197,17 +204,21 @@ export class Hub {
     }
     let room = this.rooms.get(code);
     if (!room) {
-      room = { code, via, listeners: new Set(), caption: new Caption(), chain: Promise.resolve() };
+      room = { code, via, listeners: new Set(), caption: new Caption(), pairs: new Pairs(), holding: "", chain: Promise.resolve() };
       this.rooms.set(code, room);
     }
+    const bilingual = withOriginal && via !== "original";
+    if (bilingual) this.withOriginal.add(ws);
     room.listeners.add(ws);
-    send(ws, { type: "hello", via, paused: this.paused });
-    send(ws, { type: "history", ...room.caption.snapshot() });
+    send(ws, { type: "hello", via, paused: this.paused, bilingual });
+    if (bilingual) send(ws, { type: "history", bilingual: true, ...room.pairs.snapshot(), ...this.bilingualTail(room) });
+    else send(ws, { type: "history", ...room.caption.snapshot() });
     ws.on("close", () => this.onListenerLeave(code, ws));
     this.sendStats();
   }
 
   private onListenerLeave(code: string, ws: WebSocket) {
+    this.withOriginal.delete(ws);
     const room = this.rooms.get(code);
     if (!room?.listeners.delete(ws)) return;
     this.reconcile();
@@ -329,6 +340,7 @@ export class Hub {
 
     const room = this.rooms.get(key);
     if (room && room.via !== "google") this.applyCaption(room, final, partial, isOriginal && endpoint);
+    if (room && room.via === "soniox") this.applyPairs(room, spokenFinal, spokenPartial, final, endpoint);
 
     const previewSource = this.streams.has(ORIGINAL) ? ORIGINAL : this.streams.keys().next().value;
     if (key === previewSource) {
@@ -339,7 +351,7 @@ export class Hub {
       send(this.speaker, { type: "preview", lines: snap.lines.slice(-3), current: snap.current, partial: snap.partial });
     }
 
-    if (isOriginal) this.feedGoogle(spokenFinal, langs, endpoint, spokenPartial.length > 0);
+    if (isOriginal) this.feedGoogle(spokenFinal, spokenPartial, langs, endpoint);
   }
 
   private applyCaption(room: Room, final: string, partial: string, endpoint: boolean) {
@@ -354,13 +366,48 @@ export class Hub {
       if (line) done.push(line);
     }
     for (const ws of room.listeners) {
+      if (this.withOriginal.has(ws)) continue;
       for (const line of done) send(ws, { type: "line", text: line });
       send(ws, { type: "caption", current: room.caption.current.trimStart(), partial: room.caption.partial });
     }
   }
 
+  /** Original speech from a Soniox translation stream, locked into a pair when the utterance ends. */
+  private applyPairs(room: Room, spokenFinal: string, spokenPartial: string, translationFinal: string, endpoint: boolean) {
+    room.pairs.partial = spokenPartial;
+    if (spokenFinal) room.pairs.addOriginal(spokenFinal);
+    const revised = translationFinal ? room.pairs.addTranslation(translationFinal) === "revise" : false;
+    const closed = endpoint ? room.pairs.close() : null;
+    this.sendBilingual(room, revised, closed);
+  }
+
+  private bilingualTail(room: Room): { original: string; translation: string; partial: string } {
+    if (room.via === "google") {
+      return {
+        original: [room.holding, this.pending.text].filter((s) => s.trim()).join(" ").trim(),
+        translation: "",
+        partial: this.spokenPartial.trim(),
+      };
+    }
+    const snap = room.pairs.snapshot();
+    return { original: snap.original, translation: snap.translation, partial: snap.partial };
+  }
+
+  private sendBilingual(room: Room, revised: boolean, closed: PairLine | null) {
+    const tail = this.bilingualTail(room);
+    for (const ws of room.listeners) {
+      if (!this.withOriginal.has(ws)) continue;
+      if (revised) {
+        const last = room.pairs.lines[room.pairs.lines.length - 1];
+        if (last) send(ws, { type: "pair", ...last, revise: true });
+      } else if (closed) send(ws, { type: "pair", ...closed });
+      send(ws, { type: "bilingual", ...tail });
+    }
+  }
+
   /** Google-only languages get whole sentences from the original stream, translated once each. */
-  private feedGoogle(final: string, langs: Map<string, number>, endpoint: boolean, hasPartial: boolean) {
+  private feedGoogle(final: string, spokenPartial: string, langs: Map<string, number>, endpoint: boolean) {
+    this.spokenPartial = spokenPartial;
     const rooms = [...this.rooms.values()].filter((r) => r.via === "google" && r.listeners.size > 0);
     if (!rooms.length) {
       this.pending = { text: "", langs: new Map() };
@@ -370,19 +417,28 @@ export class Hub {
     for (const [lang, n] of langs) this.pending.langs.set(lang, (this.pending.langs.get(lang) ?? 0) + n);
 
     const text = this.pending.text.trim();
+    const hasPartial = spokenPartial.length > 0;
     const complete = text.length > 0 && (endpoint || endsSentence(text));
     const waiting = complete ? hasPartial : text.length > 0 || hasPartial;
     for (const room of rooms) {
       if (room.caption.partial !== (waiting ? "…" : "")) {
         room.caption.partial = waiting ? "…" : "";
-        for (const ws of room.listeners) send(ws, { type: "caption", current: room.caption.current.trimStart(), partial: room.caption.partial });
+        for (const ws of room.listeners) {
+          if (this.withOriginal.has(ws)) continue;
+          send(ws, { type: "caption", current: room.caption.current.trimStart(), partial: room.caption.partial });
+        }
       }
+      this.sendBilingual(room, false, null);
     }
     if (!complete) return;
 
     const source = [...this.pending.langs.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
     this.pending = { text: "", langs: new Map() };
-    for (const room of rooms) room.chain = room.chain.then(() => this.translateInto(room, text, source));
+    for (const room of rooms) {
+      room.holding = text;
+      this.sendBilingual(room, false, null);
+      room.chain = room.chain.then(() => this.translateInto(room, text, source));
+    }
   }
 
   private async translateInto(room: Room, text: string, source?: string) {
@@ -395,6 +451,9 @@ export class Hub {
       out = `${text} (translation unavailable)`;
     }
     this.applyCaption(room, `${out} `, room.caption.partial, false);
+    const line = room.pairs.commit(text, out);
+    if (room.holding === text) room.holding = "";
+    this.sendBilingual(room, false, line);
   }
 
   // ------------------------------------------------------------ housekeeping

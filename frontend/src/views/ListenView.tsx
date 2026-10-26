@@ -6,7 +6,7 @@ import { useWakeLock } from "../lib/wakeLock";
 
 type Phase = "checking" | "waiting" | "live" | "reconnecting" | "ended" | "gave-up" | "outdated" | "unsupported";
 
-const STORE = { lang: "captioning.lang", size: "captioning.size", dark: "captioning.dark" };
+const STORE = { lang: "captioning.lang", size: "captioning.size", dark: "captioning.dark", original: "captioning.withOriginal" };
 
 /** An audience link names its language only with `?backend=…&lang=fr`. Without `lang`, the picker is shown. */
 function langFromUrl(): string | null {
@@ -32,6 +32,22 @@ interface CaptionState {
   partial: string;
 }
 
+interface PairLine {
+  original: string;
+  translation: string;
+}
+
+interface BilingualState {
+  lines: PairLine[];
+  original: string;
+  translation: string;
+  partial: string;
+}
+
+const EMPTY_BILINGUAL: BilingualState = { lines: [], original: "", translation: "", partial: "" };
+
+const originalStyle = "italic text-gray-400 dark:text-gray-500";
+
 export default function ListenView() {
   const backend = getBackend();
   const [lang, setLang] = useState<string | null>(() => langFromUrl());
@@ -39,6 +55,9 @@ export default function ListenView() {
   const [languages, setLanguages] = useState<Languages | null>(null);
   const [phase, setPhase] = useState<Phase>("checking");
   const [caption, setCaption] = useState<CaptionState>({ lines: [], current: "", partial: "" });
+  const [withOriginal, setWithOriginal] = useState(() => localStorage.getItem(STORE.original) === "1");
+  const [paired, setPaired] = useState(false);
+  const [bilingual, setBilingual] = useState<BilingualState>(EMPTY_BILINGUAL);
   const [paused, setPaused] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [size, setSize] = useState(() => Number(localStorage.getItem(STORE.size) ?? 3));
@@ -56,6 +75,7 @@ export default function ListenView() {
   }, [dark]);
 
   useEffect(() => localStorage.setItem(STORE.size, String(size)), [size]);
+  useEffect(() => localStorage.setItem(STORE.original, withOriginal ? "1" : "0"), [withOriginal]);
 
   useEffect(() => {
     if (venue) document.title = venue;
@@ -117,7 +137,9 @@ export default function ListenView() {
 
     const connect = () => {
       if (stopped || ws || document.visibilityState !== "visible") return;
-      const socket = new WebSocket(wsUrl("/ws/listen", { lang }));
+      const params: Record<string, string> = { lang };
+      if (withOriginal && lang !== ORIGINAL) params.original = "1";
+      const socket = new WebSocket(wsUrl("/ws/listen", params));
       ws = socket;
       socket.onopen = () => {
         retry = 0;
@@ -130,9 +152,31 @@ export default function ListenView() {
         switch (msg.type) {
           case "hello":
             setPaused(msg.paused);
+            setPaired(!!msg.bilingual);
+            if (!msg.bilingual) setBilingual(EMPTY_BILINGUAL);
             break;
           case "history":
-            setCaption({ lines: msg.lines, current: msg.current, partial: msg.partial });
+            if (msg.bilingual) {
+              setPaired(true);
+              setBilingual({
+                lines: msg.lines ?? [],
+                original: msg.original ?? "",
+                translation: msg.translation ?? "",
+                partial: msg.partial ?? "",
+              });
+            } else setCaption({ lines: msg.lines, current: msg.current, partial: msg.partial });
+            break;
+          case "pair":
+            setBilingual((b) => {
+              const line = { original: msg.original ?? "", translation: msg.translation ?? "" };
+              const lines = msg.revise && b.lines.length ? b.lines.slice(0, -1) : b.lines;
+              return { ...b, lines: [...lines, line].slice(-MAX_LINES) };
+            });
+            setNotice(null);
+            break;
+          case "bilingual":
+            setBilingual((b) => ({ ...b, original: msg.original ?? "", translation: msg.translation ?? "", partial: msg.partial ?? "" }));
+            setNotice(null);
             break;
           case "line":
             setCaption((c) => ({ ...c, lines: [...c.lines, msg.text].slice(-MAX_LINES), current: "" }));
@@ -178,6 +222,9 @@ export default function ListenView() {
     };
     document.addEventListener("visibilitychange", onVisible);
     setPhase("checking");
+    setPaired(false);
+    setBilingual(EMPTY_BILINGUAL);
+    setCaption({ lines: [], current: "", partial: "" });
     void check();
 
     return () => {
@@ -186,13 +233,13 @@ export default function ListenView() {
       document.removeEventListener("visibilitychange", onVisible);
       ws?.close();
     };
-  }, [backend, lang, choosing, attempt]);
+  }, [backend, lang, choosing, attempt, withOriginal]);
 
   // Keep the newest line in view unless the reader has scrolled back.
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && follow) el.scrollTop = el.scrollHeight;
-  }, [caption, follow, size]);
+  }, [caption, bilingual, follow, size]);
 
   const onScroll = () => {
     const el = scroller.current;
@@ -203,6 +250,8 @@ export default function ListenView() {
   const choose = (code: string) => {
     rememberLang(code);
     setCaption({ lines: [], current: "", partial: "" });
+    setBilingual(EMPTY_BILINGUAL);
+    setPaired(false);
     setLang(code);
     setChoosing(false);
   };
@@ -222,7 +271,10 @@ export default function ListenView() {
 
   if (choosing) return <LanguageChooser languages={languages} current={lang ?? localStorage.getItem(STORE.lang)} venue={venue} onChoose={choose} dark={dark} />;
 
-  const empty = !caption.lines.length && !caption.current && !caption.partial;
+  const showPairs = paired && lang !== ORIGINAL;
+  const empty = showPairs
+    ? !bilingual.lines.length && !bilingual.original && !bilingual.translation && !bilingual.partial
+    : !caption.lines.length && !caption.current && !caption.partial;
   let message: string | null = null;
   if (phase === "checking") message = "Connecting...";
   else if (phase === "waiting") message = "Waiting for captions to start. This page will connect by itself.";
@@ -252,6 +304,21 @@ export default function ListenView() {
             {label(lang!, languages?.targets.find((t) => t.code === lang)?.name)}
           </p>
           {phase === "reconnecting" && <span className="text-sm text-amber-700 dark:text-amber-400">Reconnecting...</span>}
+          {lang !== ORIGINAL && (
+            <button
+              type="button"
+              aria-pressed={withOriginal}
+              title="Show the original above the translation"
+              onClick={() => setWithOriginal((v) => !v)}
+              className={`h-11 shrink-0 rounded-lg border px-3 text-base font-semibold ${
+                withOriginal
+                  ? "border-purple bg-purple text-white"
+                  : "border-purple/30 hover:bg-veil dark:border-white/20 dark:hover:bg-white/10"
+              }`}
+            >
+              Original
+            </button>
+          )}
           <button
             type="button"
             onClick={backToLanguages}
@@ -272,17 +339,37 @@ export default function ListenView() {
       </header>
 
       <div ref={scroller} onScroll={onScroll} className="font-caption flex-1 overflow-y-auto px-5 py-4" style={{ fontSize: SIZES[size], lineHeight: 1.35 }}>
-        <div aria-live="polite" aria-relevant="additions" className="space-y-3">
-          {caption.lines.map((line, i) => (
-            <p key={i}>{line}</p>
-          ))}
-        </div>
-        {(caption.current || caption.partial) && (
-          <p className="mt-3">
-            {caption.current}
-            {caption.current && caption.partial && " "}
-            <span className="text-gray-400 dark:text-gray-500">{caption.partial}</span>
-          </p>
+        {showPairs ? (
+          <div aria-live="polite" aria-relevant="additions" className="space-y-4">
+            {bilingual.lines.map((line, i) => (
+              <div key={i}>
+                {line.original && <p className={originalStyle}>{line.original}</p>}
+                {line.translation && <p>{line.translation}</p>}
+              </div>
+            ))}
+            {(bilingual.original || bilingual.translation || bilingual.partial) && (
+              <div>
+                {bilingual.original && <p className={originalStyle}>{bilingual.original}</p>}
+                {bilingual.translation && <p>{bilingual.translation}</p>}
+                {bilingual.partial && <p className={originalStyle}>{bilingual.partial}</p>}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <div aria-live="polite" aria-relevant="additions" className="space-y-3">
+              {caption.lines.map((line, i) => (
+                <p key={i}>{line}</p>
+              ))}
+            </div>
+            {(caption.current || caption.partial) && (
+              <p className="mt-3">
+                {caption.current}
+                {caption.current && caption.partial && " "}
+                <span className="text-gray-400 dark:text-gray-500">{caption.partial}</span>
+              </p>
+            )}
+          </>
         )}
         {notice && <p className="mt-4 text-base text-amber-700 dark:text-amber-400">{notice}</p>}
         {message && <p className={`mt-6 ${empty ? "" : "text-base"} text-gray-500`}>{message}</p>}

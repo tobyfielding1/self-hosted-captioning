@@ -117,7 +117,7 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
         }
         hub.attachSpeaker(ws);
       } else {
-        hub.attachListener(ws, url.searchParams.get("lang") ?? "original");
+        hub.attachListener(ws, url.searchParams.get("lang") ?? "original", url.searchParams.get("original") === "1");
       }
     });
   });
