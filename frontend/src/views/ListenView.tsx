@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getBackend, getLanguages, getStatus, ORIGINAL, protocolSupported, siteRoot, wsUrl, type Languages } from "../backend";
 import { label, orderLanguages } from "../lib/languages";
-import { RepoLink } from "../ui";
+import { HomeLink, RepoLink } from "../ui";
 import { useWakeLock } from "../lib/wakeLock";
 
 type Phase = "checking" | "waiting" | "live" | "reconnecting" | "ended" | "gave-up" | "outdated" | "unsupported";
@@ -373,7 +373,15 @@ function LanguageChooser({
   return (
     <Shell dark={dark}>
       <div className="max-w-xl w-full mx-auto flex flex-col h-full p-4 gap-3">
-        {venue && <p className="text-lg font-semibold text-gray-600 dark:text-gray-300">{venue}</p>}
+        <div className="flex items-center gap-1">
+          {venue ? (
+            <p className="min-w-0 flex-1 truncate text-lg font-semibold text-gray-600 dark:text-gray-300">{venue}</p>
+          ) : (
+            <span className="flex-1" />
+          )}
+          <HomeLink />
+          <RepoLink />
+        </div>
         <h1 className="text-3xl font-bold text-midnight">Choose your language</h1>
         <input
           type="search"
@@ -417,12 +425,6 @@ function LanguageChooser({
             </li>
           ))}
         </ul>
-        <div className="flex items-center justify-between gap-4">
-          <a className="underline text-blue-600 hover:text-blue-800" href={siteRoot()}>
-            Live captions
-          </a>
-          <RepoLink />
-        </div>
       </div>
     </Shell>
   );

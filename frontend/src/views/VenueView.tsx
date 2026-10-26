@@ -714,11 +714,20 @@ function Finished({
         <a className="inline-block underline text-blue-600 hover:text-blue-800" href={listen} target="_blank" rel="noreferrer">
           Open the audience view
         </a>
-        <div className="flex items-center justify-between gap-4 pt-3">
-          <a className="underline text-blue-600 hover:text-blue-800" href={siteRoot()}>
-            Live captions
+        <h3 className="font-semibold text-midnight pt-3">Other venues</h3>
+        <p>Share the homepage with someone setting up captions somewhere else. The project itself is on GitHub.</p>
+        <div className="flex flex-wrap gap-3">
+          <Button variant="secondary" onClick={() => copy("home", siteRoot())}>
+            {copied === "home" ? "Copied" : "Share with other venues"}
+          </Button>
+          <a
+            href={REPO}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block bg-white border-2 border-purple/30 rounded-xl px-4 py-2.5 font-semibold hover:bg-veil"
+          >
+            See the project on GitHub
           </a>
-          <RepoLink />
         </div>
       </Details>
 
