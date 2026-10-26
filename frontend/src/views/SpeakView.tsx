@@ -66,22 +66,29 @@ export default function SpeakView({
   const live = conn !== "off";
   const wakeLock = useWakeLock(live);
 
-  // Watch whether another sound desk is connected, until this page goes live.
+  // Watch whether another sound desk is connected, while this tab is visible and not yet live.
   useEffect(() => {
     if (live) return;
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const run = () => {
+      if (cancelled || document.visibilityState !== "visible") return;
       void getStatus().then((s) => {
-        if (cancelled) return;
+        if (cancelled || document.visibilityState !== "visible") return;
         if (s) setStatus(s);
         timer = setTimeout(run, 3000);
       });
     };
+    const onVisible = () => {
+      clearTimeout(timer);
+      if (document.visibilityState === "visible") run();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     run();
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [live]);
 
