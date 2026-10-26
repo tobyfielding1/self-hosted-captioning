@@ -11,8 +11,8 @@ import { googleTranslator, type Translator } from "./translate.js";
 declare const __VERSION__: string;
 const VERSION = typeof __VERSION__ === "string" ? __VERSION__ : "dev";
 
-// Bump only when a breaking message change is unavoidable; the frontend handles every version it has seen.
-export const PROTOCOL = 1;
+// The page accepts only this version. Bump it when a running server should show the update banner until it starts again.
+export const PROTOCOL = 2;
 
 const MAX_FRAME = 64 * 1024;
 
