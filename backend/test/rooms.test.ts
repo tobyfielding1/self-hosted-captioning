@@ -433,7 +433,7 @@ describe("google fallback", () => {
     const a = listener("original");
     await a.opened();
     s.ws.send(FRAME);
-    await until(() => soniox.sessions.length === 1);
+    await until(() => soniox.sessions[0]?.config != null);
     expect(soniox.sessions[0].config.max_endpoint_delay_ms).toBe(800);
     expect(soniox.sessions[0].config.endpoint_sensitivity).toBe(0.3);
     expect(soniox.sessions[0].config.endpoint_latency_adjustment_level).toBe(2);
@@ -447,7 +447,7 @@ describe("google fallback", () => {
     const a = listener("original");
     await a.opened();
     s.ws.send(FRAME);
-    await until(() => soniox.sessions.length === 1);
+    await until(() => soniox.sessions[0]?.config != null);
     expect(soniox.sessions[0].config.max_endpoint_delay_ms).toBe(500);
     expect(soniox.sessions[0].config.endpoint_sensitivity).toBe(1);
     expect(soniox.sessions[0].config.endpoint_latency_adjustment_level).toBe(0);
