@@ -51,17 +51,28 @@ interface TokenPart {
   partial: string;
   spokenFinal: string;
   spokenPartial: string;
+  /** Close the paragraph. Set when Soniox sends `<end>`. */
   endpoint: boolean;
+  langs: Map<string, number>;
 }
+
+const blankPart = (): TokenPart => ({
+  final: "",
+  partial: "",
+  spokenFinal: "",
+  spokenPartial: "",
+  endpoint: false,
+  langs: new Map(),
+});
 
 /** Split a Soniox message on `<end>`. Words after the pause start the next paragraph. */
 function partsOf(key: string, tokens: SonioxToken[]): TokenPart[] {
   const parts: TokenPart[] = [];
-  let cur: TokenPart = { final: "", partial: "", spokenFinal: "", spokenPartial: "", endpoint: false };
+  let cur = blankPart();
   const push = (endpoint: boolean) => {
     cur.endpoint = endpoint;
     parts.push(cur);
-    cur = { final: "", partial: "", spokenFinal: "", spokenPartial: "", endpoint: false };
+    cur = blankPart();
   };
   for (const t of tokens) {
     if (isMarker(t.text)) {
@@ -75,19 +86,21 @@ function partsOf(key: string, tokens: SonioxToken[]): TokenPart[] {
       else cur.partial += t.text;
     }
     if (spoken) {
-      if (t.is_final) cur.spokenFinal += t.text;
-      else cur.spokenPartial += t.text;
+      if (t.is_final) {
+        cur.spokenFinal += t.text;
+        if (t.language) cur.langs.set(t.language, (cur.langs.get(t.language) ?? 0) + t.text.length);
+      } else cur.spokenPartial += t.text;
     }
   }
-  if (cur.final || cur.partial || cur.spokenFinal || cur.spokenPartial) parts.push(cur);
+  if (cur.final || cur.partial || cur.spokenFinal || cur.spokenPartial || cur.endpoint) parts.push(cur);
   return parts.length ? parts : [cur];
 }
 
-/** Speech-to-text used only to decide when a sentence is ready for Google Translate. */
+/** Speech-to-text used only to decide when a pause is ready for Google Translate. */
 const GOOGLE_SOURCE = "google-source";
 /** Soniox's ordinary endpoint settings. A pause starts a new paragraph. */
 const NORMAL_ENDPOINT = { endpointDelayMs: 2000, endpointSensitivity: 0, endpointLatency: 0 };
-/** Faster settings, used only to decide when a sentence is ready for Google Translate. */
+/** Faster settings, used only so Google Translate can start at each pause. */
 const GOOGLE_ENDPOINT = { endpointDelayMs: 1500, endpointSensitivity: 0.3, endpointLatency: 2 };
 
 function send(ws: WebSocket | null, msg: unknown) {
@@ -412,26 +425,13 @@ export class Hub {
   }
 
   private onGoogleTokens(tokens: SonioxToken[]) {
-    let final = "";
-    let partial = "";
-    let endpoint = false;
-    const langs = new Map<string, number>();
-    for (const t of tokens) {
-      if (isMarker(t.text)) {
-        if (t.text === "<end>" && t.is_final) endpoint = true;
-        continue;
+    for (const part of partsOf(GOOGLE_SOURCE, tokens)) {
+      if (this.previewKey() === GOOGLE_SOURCE) {
+        this.write(this.preview, part.spokenFinal, part.spokenPartial, part.endpoint);
+        this.sendPreview(this.preview);
       }
-      if (t.translation_status === "translation") continue;
-      if (t.is_final) {
-        final += t.text;
-        if (t.language) langs.set(t.language, (langs.get(t.language) ?? 0) + t.text.length);
-      } else partial += t.text;
+      this.feedGoogle(part.spokenFinal, part.langs, part.endpoint);
     }
-    if (this.previewKey() === GOOGLE_SOURCE) {
-      this.write(this.preview, final, partial, false);
-      this.sendPreview(this.preview);
-    }
-    this.feedGoogle(final, langs, endpoint);
   }
 
   private googleOriginalListeners(): WebSocket[] {
@@ -508,8 +508,8 @@ export class Hub {
       this.recordError(`Google Translate failed for ${languageName(room.code)}: ${(e as Error).message}`);
       out = `${text} (translation unavailable)`;
     }
-    this.write(room.caption, `${out.trim()} `, this.pending.text.trim() ? "…" : "", false);
-    this.publish(room.caption, [...room.listeners], "caption");
+    const paragraph = this.write(room.caption, out.trim(), this.pending.text.trim() ? "…" : "", true);
+    this.publish(room.caption, [...room.listeners], "caption", paragraph);
   }
 
   // ------------------------------------------------------------ housekeeping

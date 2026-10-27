@@ -12,7 +12,7 @@ backend on its own Google Cloud free tier; the web app is hosted on GitHub Pages
 ```
 Sound desk browser --(16 kHz PCM, silence removed)--> Venue Cloud Run --(one stream per language in use)--> Soniox
                                                              |
-Audience phones <------------(caption text)--------------+--(final sentences, languages Soniox lacks)--> Google Translate
+Audience phones <------------(caption text)--------------+--(each pause, languages Soniox lacks)--> Google Translate
 ```
 
 - Soniox connections open only while the sound desk is live **and** someone is reading that language.

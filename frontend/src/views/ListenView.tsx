@@ -414,7 +414,7 @@ function IconButton({ label: text, onClick, children }: { label: string; onClick
 
 const VIA_HINT = {
   soniox: "Soniox: live, word by word, with faster and more natural translation. Also cheaper for your venue.",
-  google: "Google Translate: a sentence at a time, just after it's spoken. Used for languages Soniox doesn't offer.",
+  google: "Google Translate: after each pause, for languages Soniox doesn't offer.",
 };
 
 function ViaTag({ via }: { via: "soniox" | "google" }) {
@@ -492,7 +492,7 @@ function LanguageChooser({
         {languages && !q && (
           <p className="text-sm text-gray-500">
             <ViaTag via="soniox" /> appears word by word, with faster, more natural translation, and costs your venue
-            less. <ViaTag via="google" /> appears a sentence at a time. If your language has both, choose Soniox.
+            less. <ViaTag via="google" /> appears after each pause. If your language has both, choose Soniox.
           </p>
         )}
         {shown.length > 0 && <p className="text-sm font-semibold text-gray-500">Languages</p>}

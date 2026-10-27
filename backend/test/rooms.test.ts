@@ -237,6 +237,7 @@ describe("cost guard", () => {
     expect(soniox.sessions[0].config.translation).toEqual({ type: "one_way", target_language: "es" });
     expect(soniox.sessions[0].config.language_hints).toBeUndefined();
     expect(soniox.sessions[0].config.model).toBe("stt-rt-v4");
+    expect(soniox.sessions[0].config.enable_speaker_diarization).toBeUndefined();
     expect(soniox.sessions[0].config.enable_endpoint_detection).toBe(true);
     expect(soniox.sessions[0].config.endpoint_latency_adjustment_level).toBe(0);
     expect(soniox.sessions[0].config.endpoint_sensitivity).toBe(0);
@@ -434,6 +435,7 @@ describe("google fallback", () => {
     expect(translations[0]).toBe("en->haw:Hello there.");
     expect(soniox.sessions).toHaveLength(1);
     expect(soniox.sessions[0].config.translation).toBeUndefined();
+    expect(soniox.sessions[0].config.enable_speaker_diarization).toBeUndefined();
     expect(soniox.sessions[0].config.enable_endpoint_detection).toBe(true);
     expect(soniox.sessions[0].config.endpoint_latency_adjustment_level).toBe(2);
     expect(soniox.sessions[0].config.endpoint_sensitivity).toBe(0.3);
@@ -449,8 +451,8 @@ describe("google fallback", () => {
     const spoken = await a.waitFor(
       (m) => m.type === "original" && (m.lines ?? []).some((line: string) => line.includes("Hello there.")) && String(m.partial).includes("and"),
     );
-    const translated = await a.waitFor((m) => m.type === "caption" && String(m.current).includes("[haw] Hello there."));
-    expect(translated.current).toContain("[haw] Hello there.");
+    const translated = await a.waitFor((m) => m.type === "line" && String(m.text).includes("[haw] Hello there."));
+    expect(translated.text).toContain("[haw] Hello there.");
     expect(soniox.sessions).toHaveLength(2);
     expect(soniox.sessions.filter((sess) => sess.config?.translation)).toHaveLength(0);
   });
