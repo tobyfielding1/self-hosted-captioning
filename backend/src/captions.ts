@@ -1,26 +1,13 @@
-const HISTORY_LINES = 20;
-const HARD_LINE = 250;
-
-/** Caption state for one language: finished lines, the line being built, and grey in-progress text. */
+/** Caption state for one language: the confirmed transcript, and grey in-progress text. */
 export class Caption {
+  /** Kept so a connected page can still read the field. The transcript is one block, so this stays empty. */
   lines: string[] = [];
   current = "";
   partial = "";
 
-  /** Appends final text. A line breaks only when it is very long; pauses are handled by the caller. */
-  addFinal(text: string): string | null {
+  /** Appends final text. Nothing here starts a new line. */
+  addFinal(text: string) {
     this.current += text;
-    if (this.current.trim().length >= HARD_LINE) return this.breakLine();
-    return null;
-  }
-
-  breakLine(): string | null {
-    const line = this.current.trim();
-    this.current = "";
-    if (!line) return null;
-    this.lines.push(line);
-    if (this.lines.length > HISTORY_LINES) this.lines.shift();
-    return line;
   }
 
   snapshot() {

@@ -368,21 +368,21 @@ export class Hub {
     }
 
     if (key === ORIGINAL) {
-      const closed = this.write(this.spoken, final, partial);
+      this.write(this.spoken, final, partial);
       const room = this.rooms.get(ORIGINAL);
-      if (room) this.publish(this.spoken, [...room.listeners], "caption", closed);
+      if (room) this.publish(this.spoken, [...room.listeners], "caption");
       const beside = this.googleOriginalListeners();
-      if (beside.length) this.publish(this.spoken, beside, "original", []);
+      if (beside.length) this.publish(this.spoken, beside, "original");
       if (this.previewKey() === ORIGINAL) this.sendPreview(this.spoken);
       return;
     }
 
     const room = this.rooms.get(key);
     if (room?.via === "soniox") {
-      const closed = this.write(room.caption, final, partial);
-      this.publish(room.caption, [...room.listeners], "caption", closed);
-      const spokenClosed = this.write(room.spoken, spokenFinal, spokenPartial);
-      this.publish(room.spoken, [...room.listeners].filter((ws) => this.withOriginal.has(ws)), "original", spokenClosed);
+      this.write(room.caption, final, partial);
+      this.publish(room.caption, [...room.listeners], "caption");
+      this.write(room.spoken, spokenFinal, spokenPartial);
+      this.publish(room.spoken, [...room.listeners].filter((ws) => this.withOriginal.has(ws)), "original");
     }
     if (this.previewKey() === key) {
       this.write(this.preview, spokenFinal, spokenPartial);
@@ -422,25 +422,17 @@ export class Hub {
     return out;
   }
 
-  /** Appends final text. A line is returned only when it has grown past the length limit. */
-  private write(caption: Caption, final: string, partial: string): string[] {
+  /** Appends final text onto the one running transcript. */
+  private write(caption: Caption, final: string, partial: string) {
     caption.partial = partial;
-    const done: string[] = [];
-    if (final) {
-      const line = caption.addFinal(final);
-      if (line) done.push(line);
-    }
-    return done;
+    if (final) caption.addFinal(final);
   }
 
-  private publish(caption: Caption, listeners: WebSocket[], kind: "caption" | "original", lines: string[]) {
+  private publish(caption: Caption, listeners: WebSocket[], kind: "caption" | "original") {
     const snap = caption.snapshot();
     for (const ws of listeners) {
       if (kind === "original") send(ws, { type: "original", ...snap });
-      else {
-        for (const text of lines) send(ws, { type: "line", text });
-        send(ws, { type: "caption", current: snap.current, partial: snap.partial });
-      }
+      else send(ws, { type: "caption", current: snap.current, partial: snap.partial });
     }
   }
 
@@ -479,7 +471,7 @@ export class Hub {
     const partial = waiting ? "…" : "";
     if (room.caption.partial === partial) return;
     room.caption.partial = partial;
-    this.publish(room.caption, [...room.listeners], "caption", []);
+    this.publish(room.caption, [...room.listeners], "caption");
   }
 
   private async translateInto(room: Room, text: string, source?: string) {
@@ -491,8 +483,8 @@ export class Hub {
       this.recordError(`Google Translate failed for ${languageName(room.code)}: ${(e as Error).message}`);
       out = `${text} (translation unavailable)`;
     }
-    const closed = this.write(room.caption, `${out.trim()} `, this.pending.text.trim() ? "…" : "");
-    this.publish(room.caption, [...room.listeners], "caption", closed);
+    this.write(room.caption, `${out.trim()} `, this.pending.text.trim() ? "…" : "");
+    this.publish(room.caption, [...room.listeners], "caption");
   }
 
   // ------------------------------------------------------------ housekeeping
