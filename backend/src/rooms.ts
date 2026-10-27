@@ -46,9 +46,48 @@ export interface HubOptions {
 const base = (code?: string) => (code ?? "").toLowerCase().split(/[-_]/)[0];
 const isMarker = (text: string) => /^<[a-z]+>$/.test(text);
 
+interface TokenPart {
+  final: string;
+  partial: string;
+  spokenFinal: string;
+  spokenPartial: string;
+  endpoint: boolean;
+}
+
+/** Split a Soniox message on `<end>`. Words after the pause start the next paragraph. */
+function partsOf(key: string, tokens: SonioxToken[]): TokenPart[] {
+  const parts: TokenPart[] = [];
+  let cur: TokenPart = { final: "", partial: "", spokenFinal: "", spokenPartial: "", endpoint: false };
+  const push = (endpoint: boolean) => {
+    cur.endpoint = endpoint;
+    parts.push(cur);
+    cur = { final: "", partial: "", spokenFinal: "", spokenPartial: "", endpoint: false };
+  };
+  for (const t of tokens) {
+    if (isMarker(t.text)) {
+      if (t.text === "<end>" && t.is_final) push(true);
+      continue;
+    }
+    const spoken = t.translation_status !== "translation";
+    const show = key === ORIGINAL || t.translation_status === "translation" || (t.translation_status !== "original" && base(t.language) === base(key));
+    if (show) {
+      if (t.is_final) cur.final += t.text;
+      else cur.partial += t.text;
+    }
+    if (spoken) {
+      if (t.is_final) cur.spokenFinal += t.text;
+      else cur.spokenPartial += t.text;
+    }
+  }
+  if (cur.final || cur.partial || cur.spokenFinal || cur.spokenPartial) parts.push(cur);
+  return parts.length ? parts : [cur];
+}
+
 /** Speech-to-text used only to decide when a sentence is ready for Google Translate. */
 const GOOGLE_SOURCE = "google-source";
-/** Soniox's low-latency endpoint settings. Normal streams leave endpoint detection off. */
+/** Soniox's ordinary endpoint settings. A pause starts a new paragraph. */
+const NORMAL_ENDPOINT = { endpointDelayMs: 2000, endpointSensitivity: 0, endpointLatency: 0 };
+/** Faster settings, used only to decide when a sentence is ready for Google Translate. */
 const GOOGLE_ENDPOINT = { endpointDelayMs: 1500, endpointSensitivity: 0.3, endpointLatency: 2 };
 
 function send(ws: WebSocket | null, msg: unknown) {
@@ -297,8 +336,8 @@ export class Hub {
     const stream = new SonioxStream(wsUrl(catalog.sonioxRegion ?? ""), this.opts.key, {
       model: catalog.model,
       targetLanguage: key === ORIGINAL || google ? undefined : key,
-      endpointDetection: google,
-      ...(google ? GOOGLE_ENDPOINT : {}),
+      endpointDetection: true,
+      ...(google ? GOOGLE_ENDPOINT : NORMAL_ENDPOINT),
     });
     this.streams.set(key, stream);
     log.info("stream opened", { lang: key });
@@ -349,44 +388,26 @@ export class Hub {
       return;
     }
 
-    let final = "";
-    let partial = "";
-    let spokenFinal = "";
-    let spokenPartial = "";
-    for (const t of tokens) {
-      if (isMarker(t.text)) continue;
-      const spoken = t.translation_status !== "translation";
-      const show = key === ORIGINAL || t.translation_status === "translation" || (t.translation_status !== "original" && base(t.language) === base(key));
-      if (show) {
-        if (t.is_final) final += t.text;
-        else partial += t.text;
-      }
-      if (spoken) {
-        if (t.is_final) spokenFinal += t.text;
-        else spokenPartial += t.text;
-      }
-    }
-
-    if (key === ORIGINAL) {
-      this.write(this.spoken, final, partial);
-      const room = this.rooms.get(ORIGINAL);
-      if (room) this.publish(this.spoken, [...room.listeners], "caption");
-      const beside = this.googleOriginalListeners();
-      if (beside.length) this.publish(this.spoken, beside, "original");
-      if (this.previewKey() === ORIGINAL) this.sendPreview(this.spoken);
-      return;
-    }
-
     const room = this.rooms.get(key);
-    if (room?.via === "soniox") {
-      this.write(room.caption, final, partial);
-      this.publish(room.caption, [...room.listeners], "caption");
-      this.write(room.spoken, spokenFinal, spokenPartial);
-      this.publish(room.spoken, [...room.listeners].filter((ws) => this.withOriginal.has(ws)), "original");
-    }
-    if (this.previewKey() === key) {
-      this.write(this.preview, spokenFinal, spokenPartial);
-      this.sendPreview(this.preview);
+    for (const part of partsOf(key, tokens)) {
+      if (key === ORIGINAL) {
+        const paragraph = this.write(this.spoken, part.final, part.partial, part.endpoint);
+        if (room) this.publish(this.spoken, [...room.listeners], "caption", paragraph);
+        const beside = this.googleOriginalListeners();
+        if (beside.length) this.publish(this.spoken, beside, "original");
+        if (this.previewKey() === ORIGINAL) this.sendPreview(this.spoken);
+        continue;
+      }
+      if (room?.via === "soniox") {
+        const paragraph = this.write(room.caption, part.final, part.partial, part.endpoint);
+        this.publish(room.caption, [...room.listeners], "caption", paragraph);
+        this.write(room.spoken, part.spokenFinal, part.spokenPartial, part.endpoint);
+        this.publish(room.spoken, [...room.listeners].filter((ws) => this.withOriginal.has(ws)), "original");
+      }
+      if (this.previewKey() === key) {
+        this.write(this.preview, part.spokenFinal, part.spokenPartial, part.endpoint);
+        this.sendPreview(this.preview);
+      }
     }
   }
 
@@ -407,7 +428,7 @@ export class Hub {
       } else partial += t.text;
     }
     if (this.previewKey() === GOOGLE_SOURCE) {
-      this.write(this.preview, final, partial);
+      this.write(this.preview, final, partial, false);
       this.sendPreview(this.preview);
     }
     this.feedGoogle(final, langs, endpoint);
@@ -422,17 +443,21 @@ export class Hub {
     return out;
   }
 
-  /** Appends final text onto the one running transcript. */
-  private write(caption: Caption, final: string, partial: string) {
+  /** Appends final text. A pause closes the paragraph and returns it. */
+  private write(caption: Caption, final: string, partial: string, endpoint: boolean): string | null {
     caption.partial = partial;
     if (final) caption.addFinal(final);
+    return endpoint ? caption.paragraph() : null;
   }
 
-  private publish(caption: Caption, listeners: WebSocket[], kind: "caption" | "original") {
+  private publish(caption: Caption, listeners: WebSocket[], kind: "caption" | "original", paragraph: string | null = null) {
     const snap = caption.snapshot();
     for (const ws of listeners) {
       if (kind === "original") send(ws, { type: "original", ...snap });
-      else send(ws, { type: "caption", current: snap.current, partial: snap.partial });
+      else {
+        if (paragraph) send(ws, { type: "line", text: paragraph });
+        send(ws, { type: "caption", current: snap.current, partial: snap.partial });
+      }
     }
   }
 
@@ -483,7 +508,7 @@ export class Hub {
       this.recordError(`Google Translate failed for ${languageName(room.code)}: ${(e as Error).message}`);
       out = `${text} (translation unavailable)`;
     }
-    this.write(room.caption, `${out.trim()} `, this.pending.text.trim() ? "…" : "");
+    this.write(room.caption, `${out.trim()} `, this.pending.text.trim() ? "…" : "", false);
     this.publish(room.caption, [...room.listeners], "caption");
   }
 

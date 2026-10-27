@@ -1,13 +1,24 @@
-/** Caption state for one language: the confirmed transcript, and grey in-progress text. */
+const HISTORY_PARAGRAPHS = 20;
+
+/** Caption state for one language: finished paragraphs, the paragraph being built, and grey in-progress text. */
 export class Caption {
-  /** Kept so a connected page can still read the field. The transcript is one block, so this stays empty. */
   lines: string[] = [];
   current = "";
   partial = "";
 
-  /** Appends final text. Nothing here starts a new line. */
+  /** Appends final text onto the open paragraph. */
   addFinal(text: string) {
     this.current += text;
+  }
+
+  /** Closes the open paragraph. A pause from Soniox is what calls this. */
+  paragraph(): string | null {
+    const line = this.current.trim();
+    this.current = "";
+    if (!line) return null;
+    this.lines.push(line);
+    if (this.lines.length > HISTORY_PARAGRAPHS) this.lines.shift();
+    return line;
   }
 
   snapshot() {
