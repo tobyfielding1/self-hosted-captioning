@@ -459,6 +459,8 @@ background() {
 }
 # Spoken captions are asked here, before the deploy starts, because that work runs in the background.
 # Enter keeps the current choice. The figures are printed, not saved.
+# Stop the previous spinner first. It redraws the current line and would hide this question.
+spin_stop
 SPOKEN="$(env_value SPOKEN)"
 REMOVE_SPOKEN=""
 if [ "$SPOKEN" = "1" ]; then
@@ -478,6 +480,7 @@ else
     local currency token paragraph
     currency="$(gcloud billing accounts describe "$BILLING" --format='value(currencyCode)' 2>>"$LOG" || true)"
     token="$(gcloud auth print-access-token 2>>"$LOG" || true)"
+    spin "Reading Google's current Chirp 3 HD price"
     paragraph="$(ACCESS_TOKEN="$token" python3 - "$currency" <<'PY'
 import json, os, sys, urllib.parse, urllib.request
 from decimal import Decimal, ROUND_HALF_UP
@@ -560,6 +563,7 @@ except Exception:
     print(fallback())
 PY
 )"
+    spin_stop
     printf '\n%s\n\n' "$paragraph" | fold -s -w 78
     read -rp "   Turn spoken captions on? [y/N] " answer
     case "$answer" in
