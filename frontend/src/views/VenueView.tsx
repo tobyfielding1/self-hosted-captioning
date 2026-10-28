@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { audioSupported, guessMode, listInputs, startCapture, type Capture, type InputMode } from "../audio/capture";
 import { clampSendAfter, SEND_AFTER } from "../audio/gate";
-import { checkDeskAccess, getBackend, getStatus, getToken, listenerLink, protocolNotice, siteRoot, speakLink, type DeskAccess, type ProtocolNotice, type Status } from "../backend";
+import { checkDeskAccess, getBackend, getStatus, getToken, listenerLink, protocolNotice, setupNotice, siteRoot, speakLink, strongestNotice, type DeskAccess, type ProtocolNotice, type Status } from "../backend";
 import { englishName } from "../lib/languages";
 import { useWakeLock, wakeLockSupported } from "../lib/wakeLock";
 import { createDeskGate } from "../audio/speech-model";
@@ -762,7 +762,9 @@ function Notices({ status }: { status: Status | null | undefined }) {
   const [tipDismissed, setTipDismissed] = useState(() => localStorage.getItem(TIP_DISMISSED) === "1");
   const nodeMajor = status ? Number(status.node.split(".")[0]) : null;
   const nodeOld = nodeMajor !== null && nodeMajor < MIN_NODE_MAJOR;
-  const update: ProtocolNotice | null = !status ? null : nodeOld ? "major" : protocolNotice(status.protocol, status.protocolVersion);
+  const update: ProtocolNotice | null = !status
+    ? null
+    : strongestNotice(nodeOld ? "major" : null, protocolNotice(status.protocol, status.protocolVersion), setupNotice(status.setupVersion));
   const down = status === null;
   const error = !!status?.error;
   const faster = !!status?.sonioxFasterRegion && !tipDismissed;

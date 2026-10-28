@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from "react";
-import { getBackend, getLanguages, getStatus, ORIGINAL, protocolNotice, siteRoot, wsUrl, type Languages } from "../backend";
+import { getBackend, getLanguages, getStatus, ORIGINAL, protocolNotice, setupNotice, siteRoot, wsUrl, type Languages } from "../backend";
 import { label, orderLanguages } from "../lib/languages";
 import { HomeLink, RepoLink } from "../ui";
 import { useWakeLock } from "../lib/wakeLock";
@@ -134,7 +134,11 @@ export default function ListenView() {
       if (stopped || document.visibilityState !== "visible") return;
       if (status?.venue) setVenue(status.venue);
       setVenueSpoken(!!status?.spoken);
-      if (status && protocolNotice(status.protocol, status.protocolVersion) === "major") return setPhase("outdated");
+      if (
+        status &&
+        (protocolNotice(status.protocol, status.protocolVersion) === "major" || setupNotice(status.setupVersion) === "major")
+      )
+        return setPhase("outdated");
       if (status?.live) return connect();
       setPhase("waiting");
       poll();

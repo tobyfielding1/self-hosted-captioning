@@ -1,6 +1,10 @@
 export const ORIGINAL = "original";
-/** Keep this in step with PROTOCOL_VERSION in the backend. */
+/** Keep these in step with PROTOCOL_VERSION and SETUP_VERSION in the backend. */
 export const PROTOCOL_VERSION = "4.1.0";
+/** Installs that have never recorded a setup version. */
+export const SETUP_BASELINE = "1.0.0";
+/** The install a venue needs. This one asks about spoken captions. */
+export const SETUP_VERSION = "1.1.0";
 
 export interface ProtocolVersion {
   major: number;
@@ -37,6 +41,23 @@ export function protocolNotice(serverProtocol: unknown, serverVersion?: unknown,
   return null;
 }
 
+/** An install that has not been recorded counts as 1.0.0. A newer install needs nothing. */
+export function setupNotice(recorded: unknown, pageVersion = SETUP_VERSION): ProtocolNotice | null {
+  const version = parseProtocol(recorded) ? recorded : SETUP_BASELINE;
+  return protocolNotice(version, version, pageVersion);
+}
+
+const NOTICE_RANK: Record<ProtocolNotice, number> = { major: 3, patch: 2, minor: 1 };
+
+/** The notice that matters most. Major outranks a security fix, which outranks an optional feature. */
+export function strongestNotice(...notices: Array<ProtocolNotice | null>): ProtocolNotice | null {
+  return notices.reduce<ProtocolNotice | null>((best, notice) => {
+    if (!notice) return best;
+    if (!best || NOTICE_RANK[notice] > NOTICE_RANK[best]) return notice;
+    return best;
+  }, null);
+}
+
 /** Which sound desk link last opened Share. This does not grant access. */
 const SEEN_TOKEN = "captioning.seenToken";
 
@@ -63,6 +84,8 @@ export interface Status {
   protocol: number;
   /** Full semver. Missing until a server from this release starts. */
   protocolVersion?: string;
+  /** Setup version recorded by the last install. Missing means 1.0.0. */
+  setupVersion?: string;
   node: string;
   region: string | null;
   /** Google Cloud project this server runs in. Missing on a server that hasn't updated yet. */

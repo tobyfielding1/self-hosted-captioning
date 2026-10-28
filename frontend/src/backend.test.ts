@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getBackend, listenerLink, protocolNotice, speakLink, wsUrl } from "./backend";
+import { getBackend, listenerLink, protocolNotice, setupNotice, speakLink, strongestNotice, wsUrl } from "./backend";
 
 const HOST = "captioning-f7729b.europe-west1.run.app";
 
@@ -23,6 +23,21 @@ describe("protocol version", () => {
     expect(protocolNotice(4, "4.2.0")).toBeNull();
     expect(protocolNotice(4, "nope")).toBe("minor");
     expect(protocolNotice("nope")).toBe("major");
+  });
+});
+
+describe("setup version", () => {
+  it("treats a missing install as 1.0.0 and keeps the stronger notice", () => {
+    expect(setupNotice(undefined)).toBe("minor");
+    expect(setupNotice("1.0.0")).toBe("minor");
+    expect(setupNotice("1.1.0")).toBeNull();
+    expect(setupNotice("1.2.0")).toBeNull();
+    expect(setupNotice("nope")).toBe("minor");
+    expect(setupNotice("1.1.0", "1.1.1")).toBe("patch");
+    expect(setupNotice("1.1.0", "2.0.0")).toBe("major");
+    expect(strongestNotice(null, "minor", "patch")).toBe("patch");
+    expect(strongestNotice("minor", "major")).toBe("major");
+    expect(strongestNotice(null, null)).toBeNull();
   });
 });
 

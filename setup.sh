@@ -420,6 +420,10 @@ background() {
   # The Soniox key is added afterwards (a quick settings change), so the build doesn't wait for it.
   # A new build account, or a newly enabled Artifact Registry, is often denied for a minute or two.
   step "Building the captioning server (about 3 minutes)"
+  # Recorded on the server. A later cold start does not move it, so an update notice stays until this install.
+  local setup_version
+  setup_version="$(sed -n 's/^export const SETUP_VERSION = "\([0-9][0-9.]*\)".*/\1/p' backend/src/server.ts)"
+  [ -n "$setup_version" ] || die "reading the setup version"
   local attempt=0
   while :; do
     # No Dockerfile: Cloud Run builds with its Node 24 image and patches that image later.
@@ -438,7 +442,7 @@ background() {
       --service-account="$run_sa" \
       --build-service-account="projects/${PROJECT}/serviceAccounts/${build_sa}" \
       "${drop[@]}" \
-      --update-env-vars="^@^SPEAKER_TOKEN=${TOKEN}@BILLING_ACCOUNT=${BILLING}@VENUE_NAME=${DISPLAY}${SPOKEN:+@SPOKEN=1}" \
+      --update-env-vars="^@^SPEAKER_TOKEN=${TOKEN}@BILLING_ACCOUNT=${BILLING}@VENUE_NAME=${DISPLAY}@SETUP_VERSION=${setup_version}${SPOKEN:+@SPOKEN=1}" \
       --quiet >"$WORK/deploy.out" 2>&1; then
       cat "$WORK/deploy.out"
       break

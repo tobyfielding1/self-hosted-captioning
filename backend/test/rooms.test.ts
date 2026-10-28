@@ -381,6 +381,18 @@ describe("speaker lifecycle", () => {
     await a.waitFor((m) => m.type === "ended", 300);
   });
 
+  it("reports the setup version recorded at install, which a cold start does not advance", async () => {
+    const status = () => fetch(`http://127.0.0.1:${app.port}/status`).then((r) => r.json());
+    expect((await status()).setupVersion).toBeUndefined();
+    process.env.SETUP_VERSION = "1.1.0";
+    try {
+      expect((await status()).setupVersion).toBe("1.1.0");
+    } finally {
+      delete process.env.SETUP_VERSION;
+    }
+    expect((await status()).setupVersion).toBeUndefined();
+  });
+
   it("reports streaming only while a sound desk is connected", async () => {
     const status = () => fetch(`http://127.0.0.1:${app.port}/status`).then((r) => r.json());
     expect((await status()).streaming).toBe(false);
