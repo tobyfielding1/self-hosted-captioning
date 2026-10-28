@@ -6,7 +6,13 @@ import { useWakeLock } from "../lib/wakeLock";
 
 type Phase = "checking" | "waiting" | "live" | "reconnecting" | "ended" | "gave-up" | "outdated" | "unsupported";
 
-const STORE = { lang: "captioning.lang", size: "captioning.size", dark: "captioning.dark", original: "captioning.withOriginal" };
+const STORE = {
+  lang: "captioning.lang",
+  size: "captioning.size",
+  dark: "captioning.dark",
+  original: "captioning.withOriginal",
+  audio: "captioning.audio",
+};
 
 /** An audience link names its language only with `?backend=…&lang=fr`. Without `lang`, the picker is shown. */
 function langFromUrl(): string | null {
@@ -21,6 +27,8 @@ function rememberLang(code: string) {
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 const SIZES = [20, 24, 28, 34, 40, 48, 56];
+/** A silent clip, played on the tap so iPhones allow sound later. */
+const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
 /** How often a visible waiting page asks whether the sound desk is live. */
 const POLL_MS = 2_000;
 const GIVE_UP_MS = 2 * 60 * 60_000;
@@ -52,6 +60,9 @@ export default function ListenView() {
   const [notice, setNotice] = useState<string | null>(null);
   const [size, setSize] = useState(() => Number(localStorage.getItem(STORE.size) ?? 3));
   const [dark, setDark] = useState(() => localStorage.getItem(STORE.dark) === "1");
+  const [venueSpoken, setVenueSpoken] = useState(false);
+  const [audio, setAudio] = useState(() => localStorage.getItem(STORE.audio) === "1");
+  const sound = useRef<{ el: HTMLAudioElement; clips: string[]; playing: boolean } | null>(null);
   const [follow, setFollow] = useState(true);
   const [attempt, setAttempt] = useState(0);
   const [venue, setVenue] = useState<string | null>(null);
@@ -91,6 +102,8 @@ export default function ListenView() {
     };
   }, [backend]);
 
+  const hear = audio && !!lang && lang !== ORIGINAL && !!languages?.targets.some((t) => t.code === lang && t.audio);
+
   // Connection loop: while this tab is visible, check often and connect once the desk is live.
   useEffect(() => {
     if (!backend || !lang || choosing) return;
@@ -120,16 +133,55 @@ export default function ListenView() {
       const status = await getStatus();
       if (stopped || document.visibilityState !== "visible") return;
       if (status?.venue) setVenue(status.venue);
+      setVenueSpoken(!!status?.spoken);
       if (status && !protocolSupported(status)) return setPhase("outdated");
       if (status?.live) return connect();
       setPhase("waiting");
       poll();
     };
 
+    const stopSound = () => {
+      const deck = sound.current;
+      if (!deck) return;
+      deck.clips = [];
+      deck.playing = false;
+      deck.el.pause();
+    };
+
+    const play = (b64: string) => {
+      const deck = sound.current ?? { el: new Audio(), clips: [], playing: false };
+      sound.current = deck;
+      deck.clips.push(b64);
+      const drain = () => {
+        if (deck.playing) return;
+        const next = deck.clips.shift();
+        if (!next) return;
+        deck.playing = true;
+        const bytes = Uint8Array.from(atob(next), (c) => c.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+        deck.el.onended = () => {
+          URL.revokeObjectURL(url);
+          deck.playing = false;
+          drain();
+        };
+        deck.el.onerror = () => {
+          URL.revokeObjectURL(url);
+          deck.playing = false;
+          drain();
+        };
+        deck.el.src = url;
+        void deck.el.play().catch(() => {
+          deck.playing = false;
+        });
+      };
+      drain();
+    };
+
     const connect = () => {
       if (stopped || ws || document.visibilityState !== "visible") return;
       const params: Record<string, string> = { lang };
       if (withOriginal && lang !== ORIGINAL) params.original = "1";
+      if (hear) params.audio = "1";
       const socket = new WebSocket(wsUrl("/ws/listen", params));
       ws = socket;
       socket.onopen = () => {
@@ -167,12 +219,17 @@ export default function ListenView() {
             break;
           case "paused":
             setPaused(msg.paused);
+            if (msg.paused) stopSound();
             break;
           case "error":
             setNotice(msg.message);
             break;
           case "ended":
             ended = true;
+            stopSound();
+            break;
+          case "audio":
+            if (typeof msg.audio === "string") play(msg.audio);
             break;
         }
       };
@@ -210,9 +267,10 @@ export default function ListenView() {
       stopped = true;
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
+      stopSound();
       ws?.close();
     };
-  }, [backend, lang, choosing, attempt, withOriginal]);
+  }, [backend, lang, choosing, attempt, withOriginal, hear]);
 
   // Keep the newest line in view unless the reader has scrolled back.
   useLayoutEffect(() => {
@@ -282,6 +340,31 @@ export default function ListenView() {
             {label(lang!, languages?.targets.find((t) => t.code === lang)?.name)}
           </p>
           {phase === "reconnecting" && <span className="text-sm text-amber-700 dark:text-amber-400">Reconnecting...</span>}
+          {venueSpoken && lang !== ORIGINAL && languages?.targets.some((t) => t.code === lang && t.audio) && (
+            <button
+              type="button"
+              aria-pressed={audio}
+              aria-label={audio ? "Turn sound off" : "Turn sound on"}
+              title={audio ? "Sound on" : "Sound off"}
+              onClick={() => {
+                const next = !audio;
+                localStorage.setItem(STORE.audio, next ? "1" : "0");
+                setAudio(next);
+                if (!next) return;
+                const el = sound.current?.el ?? new Audio();
+                sound.current = sound.current ?? { el, clips: [], playing: false };
+                el.src = SILENT_WAV;
+                void el.play().catch(() => {});
+              }}
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${
+                audio
+                  ? "border-purple bg-purple text-white"
+                  : "border-purple/30 hover:bg-veil dark:border-white/20 dark:hover:bg-white/10"
+              }`}
+            >
+              <SpeakerIcon on={audio} />
+            </button>
+          )}
           {lang !== ORIGINAL && (
             <button
               type="button"
@@ -397,6 +480,15 @@ function StatusNote({
 
 function Shell({ dark, children }: { dark: boolean; children: React.ReactNode }) {
   return <div className={`h-full flex flex-col ${dark ? "bg-midnight text-white" : "bg-white text-charcoal"}`}>{children}</div>;
+}
+
+function SpeakerIcon({ on }: { on: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
+      <path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z" />
+      {on && <path fill="currentColor" d="M16.2 7.1a5 5 0 0 1 0 9.8v-1.8a3 3 0 0 0 0-6.2z" />}
+    </svg>
+  );
 }
 
 function IconButton({ label: text, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {

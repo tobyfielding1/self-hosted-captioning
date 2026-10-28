@@ -355,8 +355,11 @@ background() {
   die() { printf '%s' "$1" >"$WORK/failed"; exit 1; }
 
   step "Turning on Google Cloud services"
-  gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
-    translate.googleapis.com billingbudgets.googleapis.com cloudresourcemanager.googleapis.com --quiet ||
+  local apis=(run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
+    translate.googleapis.com billingbudgets.googleapis.com cloudresourcemanager.googleapis.com)
+  # Spoken captions are off unless this install just accepted them. Missing means off.
+  if [ "${SPOKEN:-}" = "1" ]; then apis+=(texttospeech.googleapis.com); fi
+  gcloud services enable "${apis[@]}" --quiet ||
     die "turning on Google Cloud services"
 
   if [ -z "$REGION" ]; then
@@ -420,6 +423,9 @@ background() {
   local attempt=0
   while :; do
     # No Dockerfile: Cloud Run builds with its Node 24 image and patches that image later.
+    local drop=()
+    # An explicit "no" removes the flag. Leaving it out of the update would keep the old value.
+    if [ "${REMOVE_SPOKEN:-}" = "1" ]; then drop=(--remove-env-vars=SPOKEN); fi
     if gcloud run deploy "$SERVICE" \
       --source backend \
       --base-image nodejs24 \
@@ -431,7 +437,8 @@ background() {
       --cpu=1 --memory=512Mi \
       --service-account="$run_sa" \
       --build-service-account="projects/${PROJECT}/serviceAccounts/${build_sa}" \
-      --update-env-vars="^@^SPEAKER_TOKEN=${TOKEN}@BILLING_ACCOUNT=${BILLING}@VENUE_NAME=${DISPLAY}" \
+      "${drop[@]}" \
+      --update-env-vars="^@^SPEAKER_TOKEN=${TOKEN}@BILLING_ACCOUNT=${BILLING}@VENUE_NAME=${DISPLAY}${SPOKEN:+@SPOKEN=1}" \
       --quiet >"$WORK/deploy.out" 2>&1; then
       cat "$WORK/deploy.out"
       break
@@ -446,6 +453,118 @@ background() {
     step "Building the captioning server (about 3 minutes)"
   done
 }
+# Spoken captions are asked here, before the deploy starts, because that work runs in the background.
+# Enter keeps the current choice. The figures are printed, not saved.
+SPOKEN="$(env_value SPOKEN)"
+REMOVE_SPOKEN=""
+if [ "$SPOKEN" = "1" ]; then
+  note "Spoken captions are on."
+  read -rp "   Leave spoken captions on? [Y/n] " answer
+  case "$answer" in
+    n|N|no|NO)
+      SPOKEN=""
+      REMOVE_SPOKEN=1
+      note "Spoken captions will turn off. The sound button goes away, and Google is not asked to speak."
+      ;;
+    *) note "Spoken captions stay on." ;;
+  esac
+else
+  SPOKEN=""
+  explain_spoken() {
+    local currency token paragraph
+    currency="$(gcloud billing accounts describe "$BILLING" --format='value(currencyCode)' 2>>"$LOG" || true)"
+    token="$(gcloud auth print-access-token 2>>"$LOG" || true)"
+    paragraph="$(ACCESS_TOKEN="$token" python3 - "$currency" <<'PY'
+import json, os, sys, urllib.parse, urllib.request
+from decimal import Decimal, ROUND_HALF_UP
+
+LINK = "https://cloud.google.com/text-to-speech/pricing#latest-tts-models"
+HOURS_PER_MILLION = Decimal(30)
+TAIL = (
+    "It starts again next month. Anyone else listening to that same language hears the same stream, so they add nothing. "
+    "A language is spoken only while someone in the audience has sound on, and only while the sound desk is recording. "
+    "When recording stops, speech stops."
+)
+
+def fallback():
+    return (
+        "Spoken captions are optional. Google counts the characters spoken each month. "
+        f"The current Chirp 3 HD price is here: {LINK}. The allowance is monthly and starts again next month. "
+        "Anyone else listening to that same language hears the same stream, so they add nothing. "
+        "A language is spoken only while someone in the audience has sound on, and only while the sound desk is recording. "
+        "When recording stops, speech stops."
+    )
+
+def money(amount, currency):
+    text = f"{amount.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP):.2f}"
+    symbol = {"USD": "US$", "GBP": "£", "EUR": "€"}.get(currency)
+    return f"{symbol}{text}" if symbol else f"{currency} {text}"
+
+def unit_price(price):
+    return Decimal(price.get("units") or "0") + Decimal(price.get("nanos") or 0) / Decimal(1_000_000_000)
+
+def get(url, token):
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=20) as res:
+        return json.load(res)
+
+def pages(url, token, key):
+    while url:
+        body = get(url, token)
+        yield from body.get(key) or []
+        nxt = body.get("nextPageToken")
+        if not nxt:
+            break
+        base = url.split("&pageToken=")[0].split("?pageToken=")[0]
+        url = f"{base}{'&' if '?' in base else '?'}pageToken={urllib.parse.quote(nxt)}"
+
+try:
+    token = os.environ.get("ACCESS_TOKEN") or ""
+    if not token:
+        raise RuntimeError("no token")
+    currency = (sys.argv[1] or "USD").upper()
+    service = next(
+        s for s in pages("https://cloudbilling.googleapis.com/v1/services?pageSize=5000", token, "services")
+        if s.get("displayName") == "Cloud Text-to-Speech API"
+    )
+    sku_url = f"https://cloudbilling.googleapis.com/v1/{service['name']}/skus?pageSize=5000&currencyCode={urllib.parse.quote(currency)}"
+    sku = next(
+        s for s in pages(sku_url, token, "skus")
+        if "chirp3-hd" in s.get("description", "").lower() and "character" in s.get("description", "").lower()
+    )
+    info = max(sku.get("pricingInfo") or [], key=lambda i: i.get("effectiveTime") or "")
+    paid = next(r for r in info["pricingExpression"]["tieredRates"] if unit_price(r["unitPrice"]) > 0)
+    code = paid["unitPrice"].get("currencyCode") or currency
+    free = Decimal(str(paid["startUsageAmount"]))
+    per_million = unit_price(paid["unitPrice"]) * Decimal(1_000_000)
+    hours = int((free / Decimal(1_000_000) * HOURS_PER_MILLION).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    hourly = per_million / HOURS_PER_MILLION
+    parts = [
+        "Spoken captions are optional. Google counts the characters spoken each month. "
+        f"These figures were just read from Google's current Chirp 3 HD price: {LINK}."
+    ]
+    charge = f"about {money(hourly, code)} an hour for each language being spoken through audience devices."
+    if hours > 0:
+        unit = "hour" if hours == 1 else "hours"
+        parts.append(f"Currently the free allowance is around {hours} {unit} of speech in one language.")
+        parts.append(f"After that, Google charges {charge}")
+    elif per_million > 0:
+        parts.append(f"Google charges {charge}")
+    parts.append(TAIL)
+    print(" ".join(parts))
+except Exception:
+    print(fallback())
+PY
+)"
+    printf '\n%s\n\n' "$paragraph" | fold -s -w 78
+    read -rp "   Turn spoken captions on? [y/N] " answer
+    case "$answer" in
+      y|Y|yes|YES) SPOKEN=1 ;;
+      *) SPOKEN="" ;;
+    esac
+  }
+  explain_spoken
+fi
 background >>"$LOG" 2>&1 &
 BG_PID=$!
 

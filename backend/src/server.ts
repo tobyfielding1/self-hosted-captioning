@@ -1,11 +1,12 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import { WebSocketServer } from "ws";
-import { Catalog } from "./catalog.js";
+import { Catalog, type ChirpVoice } from "./catalog.js";
 import * as gcp from "./gcp.js";
 import * as log from "./log.js";
 import { Hub, type Timing } from "./rooms.js";
 import { regionLabel } from "./soniox.js";
+import { speak } from "./tts.js";
 import { googleTranslator, type Translator } from "./translate.js";
 
 declare const __VERSION__: string;
@@ -20,6 +21,7 @@ export interface StartOptions {
   port?: number;
   timing?: Partial<Timing>;
   translator?: Translator;
+  speaker?: ((text: string, voice: ChirpVoice) => Promise<Buffer>) | null;
 }
 
 export interface Running {
@@ -63,13 +65,21 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
     project,
     billingAccount: process.env.BILLING_ACCOUNT || null,
     venue: process.env.VENUE_NAME || null,
+    spoken: process.env.SPOKEN === "1",
     sonioxRegion: catalog.sonioxRegion === null ? null : regionLabel(catalog.sonioxRegion),
     sonioxFasterRegion: catalog.sonioxFasterRegion,
     model: catalog.model,
     uptimeS: Math.round((Date.now() - startedAt) / 1000),
   });
 
-  const hub = new Hub({ key, catalog, translator: opts.translator ?? googleTranslator, timing: opts.timing, info });
+  const hub = new Hub({
+    key,
+    catalog,
+    translator: opts.translator ?? googleTranslator,
+    speaker: opts.speaker === undefined ? (process.env.SPOKEN === "1" ? speak : null) : opts.speaker,
+    timing: opts.timing,
+    info,
+  });
 
   const server = http.createServer((req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -117,7 +127,12 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
         }
         hub.attachSpeaker(ws);
       } else {
-        hub.attachListener(ws, url.searchParams.get("lang") ?? "original", url.searchParams.get("original") === "1");
+        hub.attachListener(
+          ws,
+          url.searchParams.get("lang") ?? "original",
+          url.searchParams.get("original") === "1",
+          url.searchParams.get("audio") === "1",
+        );
       }
     });
   });

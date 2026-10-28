@@ -1,6 +1,6 @@
 import type { WebSocket } from "ws";
 import { Caption } from "./captions.js";
-import type { Catalog, Via } from "./catalog.js";
+import type { Catalog, ChirpVoice, Via } from "./catalog.js";
 import * as log from "./log.js";
 import { describeError, SonioxStream, wsUrl, type SonioxError, type SonioxToken } from "./soniox.js";
 import type { Translator } from "./translate.js";
@@ -29,6 +29,8 @@ interface Room {
   code: string;
   via: Via | "original";
   listeners: Set<WebSocket>;
+  /** Listeners who turned sound on. They share one spoken stream. */
+  audio: Set<WebSocket>;
   caption: Caption;
   /** Spoken words from a Soniox translation stream, shown in the second box. */
   spoken: Caption;
@@ -39,6 +41,8 @@ export interface HubOptions {
   key: string;
   catalog: Catalog;
   translator: Translator | null;
+  /** Speaks one finished line. Null when this venue has not turned spoken captions on. */
+  speaker?: ((text: string, voice: ChirpVoice) => Promise<Buffer>) | null;
   timing?: Partial<Timing>;
   info?: () => Record<string, unknown>;
 }
@@ -249,7 +253,7 @@ export class Hub {
 
   // -------------------------------------------------------------- listeners
 
-  attachListener(ws: WebSocket, code: string, withOriginal = false) {
+  attachListener(ws: WebSocket, code: string, withOriginal = false, audio = false) {
     if (!this.live) {
       ws.close(4404, "not-live");
       return;
@@ -265,6 +269,7 @@ export class Hub {
         code,
         via,
         listeners: new Set(),
+        audio: new Set(),
         caption: code === ORIGINAL ? this.spoken : new Caption(),
         spoken: new Caption(),
         chain: Promise.resolve(),
@@ -274,6 +279,7 @@ export class Hub {
     const bilingual = withOriginal && via !== "original";
     if (bilingual) this.withOriginal.add(ws);
     room.listeners.add(ws);
+    if (audio) room.audio.add(ws);
     send(ws, { type: "hello", via, paused: this.paused, bilingual });
     const original = bilingual ? (via === "google" ? this.spoken : room.spoken).snapshot() : undefined;
     send(ws, { type: "history", ...room.caption.snapshot(), ...(original ? { original } : {}) });
@@ -285,6 +291,7 @@ export class Hub {
     this.withOriginal.delete(ws);
     const room = this.rooms.get(code);
     if (!room?.listeners.delete(ws)) return;
+    room.audio.delete(ws);
     this.reconcile();
     this.sendStats();
   }
@@ -414,6 +421,7 @@ export class Hub {
       if (room?.via === "soniox") {
         const paragraph = this.write(room.caption, part.final, part.partial, part.endpoint);
         this.publish(room.caption, [...room.listeners], "caption", paragraph);
+        if (paragraph) this.scheduleSpeech(room, paragraph);
         this.write(room.spoken, part.spokenFinal, part.spokenPartial, part.endpoint);
         this.publish(room.spoken, [...room.listeners].filter((ws) => this.withOriginal.has(ws)), "original");
       }
@@ -510,6 +518,28 @@ export class Hub {
     }
     const paragraph = this.write(room.caption, out.trim(), this.pending.text.trim() ? "…" : "", true);
     this.publish(room.caption, [...room.listeners], "caption", paragraph);
+    if (paragraph) await this.say(room, paragraph);
+  }
+
+  /** Queue this line behind any speech already in progress for the room. */
+  private scheduleSpeech(room: Room, text: string) {
+    room.chain = room.chain.then(() => this.say(room, text));
+  }
+
+  /** One synthesis for every phone that has sound on for this language. */
+  private async say(room: Room, text: string) {
+    const voice = this.opts.catalog.chirpVoice(room.code);
+    if (!voice || !this.opts.speaker || !this.live || this.paused || !room.audio.size || !text.trim()) return;
+    let audio: Buffer;
+    try {
+      audio = await this.opts.speaker(text, voice);
+    } catch (e) {
+      log.warn("speech failed", { lang: room.code, err: String(e) });
+      return;
+    }
+    if (!this.live || this.paused) return;
+    const msg = { type: "audio", audio: audio.toString("base64") };
+    for (const ws of room.audio) send(ws, msg);
   }
 
   // ------------------------------------------------------------ housekeeping

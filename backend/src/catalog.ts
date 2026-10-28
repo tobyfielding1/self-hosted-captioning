@@ -5,6 +5,37 @@ import { detectRegion, fastestRegion, regionLabel, SonioxHttpError, type SonioxM
 const REFRESH_MS = 24 * 60 * 60 * 1000;
 const RETRY_MS = 60 * 1000;
 
+const ROOT_ALIAS: Record<string, string> = { cmn: "zh", fil: "tl", nb: "no", nn: "no", iw: "he", jw: "jv" };
+
+export interface ChirpVoice {
+  name: string;
+  languageCode: string;
+}
+
+function languageTag(code: string): string {
+  try {
+    return new Intl.Locale(canonical(code)).language.toLowerCase();
+  } catch {
+    return code.toLowerCase().split(/[-_]/)[0];
+  }
+}
+
+/** Language without region. `en-GB` and `cmn-CN` share a root with `en` and `zh`. */
+export function languageRoot(code: string): string {
+  const tag = languageTag(code);
+  return ROOT_ALIAS[tag] ?? tag;
+}
+
+/** Chirp voice for this audience language. The same region wins; any voice of that language is acceptable. */
+export function pickChirpVoice(voices: ChirpVoice[], wanted: string): ChirpVoice | null {
+  const root = languageRoot(wanted);
+  const hits = voices.filter((v) => v.name.includes("Chirp3-HD") && languageRoot(v.languageCode) === root);
+  if (!hits.length) return null;
+  const key = localeKey(wanted);
+  const same = hits.filter((v) => localeKey(v.languageCode) === key);
+  return [...(same.length ? same : hits)].sort((a, b) => a.name.localeCompare(b.name))[0];
+}
+
 export type Via = "soniox" | "google";
 
 function canonical(code: string): string {
@@ -56,6 +87,7 @@ export class Catalog {
   googleTargets = new Set<string>();
   /** English names from Google, for languages browsers can't name themselves. */
   googleNames = new Map<string, string>();
+  chirpVoices: ChirpVoice[] = [];
   error: string | null = null;
   private timer?: NodeJS.Timeout;
 
@@ -73,7 +105,7 @@ export class Catalog {
     clearTimeout(this.timer);
     // Google is often not ready for a few minutes after install (API just enabled, permissions
     // propagating), so a failure on either side retries soon rather than waiting a day.
-    const results = await Promise.allSettled([this.refreshSoniox(), this.refreshGoogle()]);
+    const results = await Promise.allSettled([this.refreshSoniox(), this.refreshGoogle(), this.refreshVoices()]);
     const ok = results.every((r) => r.status === "fulfilled");
     this.timer = setTimeout(() => void this.refresh(), ok ? REFRESH_MS : RETRY_MS);
     this.timer.unref();
@@ -126,6 +158,31 @@ export class Catalog {
     }
   }
 
+  /** Chirp 3 HD voice for this audience language, or null when Chirp has none. */
+  chirpVoice(code: string): ChirpVoice | null {
+    return pickChirpVoice(this.chirpVoices, code);
+  }
+
+  /** Voices share the catalog timer. Skipped unless this venue turned spoken captions on. */
+  private async refreshVoices() {
+    if (process.env.SPOKEN !== "1") return;
+    const token = await gcp.accessToken();
+    if (!token) return;
+    const res = await fetch("https://texttospeech.googleapis.com/v1/voices", {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) throw new Error(`voices HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+    const body = (await res.json()) as { voices?: { name: string; languageCodes?: string[] }[] };
+    const next: ChirpVoice[] = [];
+    for (const voice of body.voices ?? []) {
+      if (!voice.name.includes("Chirp3-HD")) continue;
+      for (const languageCode of voice.languageCodes ?? []) next.push({ name: voice.name, languageCode });
+    }
+    this.chirpVoices = next;
+    log.info("chirp voices", { voices: next.length });
+  }
+
   /** How a listener language is served, or null if nobody can serve it. */
   via(code: string): Via | null {
     if (this.sonioxTargets.has(code)) return "soniox";
@@ -147,9 +204,10 @@ export class Catalog {
       seen.add(key);
       google.push({ code, via: "google", name: this.googleNames.get(code) });
     }
+    const targets = [...[...this.sonioxTargets].map((code) => ({ code, via: "soniox" as const })), ...google];
     return {
       speech: this.speech,
-      targets: [...[...this.sonioxTargets].map((code) => ({ code, via: "soniox" as const })), ...google],
+      targets: targets.map((t) => (this.chirpVoice(t.code) ? { ...t, audio: true as const } : t)),
     };
   }
 }

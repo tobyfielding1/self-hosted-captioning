@@ -32,6 +32,8 @@ export interface Status {
   billingAccount?: string | null;
   /** Name chosen at install. Missing until that install records it. */
   venue?: string | null;
+  /** This venue turned on spoken captions. Missing on a server that hasn't updated yet. */
+  spoken?: boolean;
   sonioxRegion: string | null;
   sonioxFasterRegion: string | null;
   model: string | null;
@@ -43,7 +45,7 @@ export interface Status {
 export interface Languages {
   speech: string[];
   /** `name` is Google's English name, for languages browsers can't name themselves. */
-  targets: { code: string; via: "soniox" | "google"; name?: string }[];
+  targets: { code: string; via: "soniox" | "google"; name?: string; audio?: boolean }[];
 }
 
 /** Audience links carry `?backend=` and no token. The token is the sound desk. */

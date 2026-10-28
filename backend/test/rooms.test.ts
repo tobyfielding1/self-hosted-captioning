@@ -1,6 +1,7 @@
 import http from "node:http";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import WebSocket, { WebSocketServer } from "ws";
+import { pickChirpVoice } from "../src/catalog.js";
 import { start, type Running } from "../src/server.js";
 
 /** A fake Soniox: /v1/models over HTTP plus a real-time WebSocket that echoes a caption per audio frame. */
@@ -123,14 +124,17 @@ let soniox: FakeSoniox;
 let app: Running;
 let clients: Client[] = [];
 const translations: string[] = [];
+const said: string[] = [];
 
 const speaker = async (token = "secret") => {
   const c = new Client(`ws://127.0.0.1:${app.port}/ws/speaker?token=${token}`);
   clients.push(c);
   return c;
 };
-const listener = (lang: string, withOriginal = false) => {
-  const c = new Client(`ws://127.0.0.1:${app.port}/ws/listen?lang=${lang}${withOriginal ? "&original=1" : ""}`);
+const listener = (lang: string, withOriginal = false, audio = false) => {
+  const c = new Client(
+    `ws://127.0.0.1:${app.port}/ws/listen?lang=${lang}${withOriginal ? "&original=1" : ""}${audio ? "&audio=1" : ""}`,
+  );
   clients.push(c);
   return c;
 };
@@ -154,6 +158,7 @@ beforeEach(async () => {
   soniox.sessions = [];
   soniox.nextError = null;
   translations.length = 0;
+  said.length = 0;
   app = await start({
     port: 0,
     timing: TIMING,
@@ -162,6 +167,10 @@ beforeEach(async () => {
         translations.push(`${source}->${target}:${text}`);
         return `[${target}] ${text}`;
       },
+    },
+    speaker: async (text, voice) => {
+      said.push(`${voice.name}:${text}`);
+      return Buffer.from("audio");
     },
   });
   await until(() => app.catalog.model !== null);
@@ -191,6 +200,22 @@ describe("catalog", () => {
     const google = app.catalog.languages().targets.filter((t) => t.via === "google");
     expect(google.map((t) => t.code).sort()).toEqual(["jv", "pt-PT", "yue", "zh-TW"]);
     expect(google.find((t) => t.code === "yue")).toMatchObject({ name: "Cantonese" });
+  });
+
+  it("picks a Chirp voice of the same language, preferring the matching region", () => {
+    const voices = [
+      { name: "en-US-Wavenet-A", languageCode: "en-US" },
+      { name: "en-GB-Chirp3-HD-Achird", languageCode: "en-GB" },
+      { name: "en-US-Chirp3-HD-Charon", languageCode: "en-US" },
+      { name: "cmn-CN-Chirp3-HD-Aoede", languageCode: "cmn-CN" },
+      { name: "nb-NO-Chirp3-HD-Aoede", languageCode: "nb-NO" },
+    ];
+    expect(pickChirpVoice(voices, "en")?.name).toBe("en-US-Chirp3-HD-Charon");
+    expect(pickChirpVoice(voices, "en-GB")?.name).toBe("en-GB-Chirp3-HD-Achird");
+    expect(pickChirpVoice(voices, "en-NZ")?.languageCode.startsWith("en-")).toBe(true);
+    expect(pickChirpVoice(voices, "zh")?.languageCode).toBe("cmn-CN");
+    expect(pickChirpVoice(voices, "no")?.languageCode).toBe("nb-NO");
+    expect(pickChirpVoice(voices, "fa")).toBeNull();
   });
 });
 
@@ -264,6 +289,24 @@ describe("cost guard", () => {
     expect(soniox.sessions).toHaveLength(1);
     expect(soniox.sessions[0].config.enable_endpoint_detection).toBe(true);
     expect(soniox.sessions[0].config.max_endpoint_delay_ms).toBe(2000);
+  });
+
+  it("speaks a language once and shares it with everyone who turned sound on", async () => {
+    app.catalog.chirpVoices = [{ name: "es-ES-Chirp3-HD-Charon", languageCode: "es-ES" }];
+    const s = await speaker();
+    await s.opened();
+    const a = listener("es", false, true);
+    const b = listener("es", false, true);
+    const quiet = listener("es");
+    await Promise.all([a.opened(), b.opened(), quiet.opened()]);
+    s.ws.send(FRAME);
+    const heard = await a.waitFor((m) => m.type === "audio");
+    const heardToo = await b.waitFor((m) => m.type === "audio");
+    expect(heard.audio).toBe(Buffer.from("audio").toString("base64"));
+    expect(heardToo.audio).toBe(heard.audio);
+    await sleep(50);
+    expect(quiet.messages.some((m) => m.type === "audio")).toBe(false);
+    expect(said).toEqual(["es-ES-Chirp3-HD-Charon:[es] Hola."]);
   });
 
   it("closes the stream when the last listener leaves", async () => {
