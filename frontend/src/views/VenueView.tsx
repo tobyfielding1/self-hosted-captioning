@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { audioSupported, guessMode, listInputs, startCapture, type Capture, type InputMode } from "../audio/capture";
 import { clampSendAfter, SEND_AFTER } from "../audio/gate";
-import { checkDeskAccess, getBackend, getStatus, getToken, listenerLink, protocolSupported, siteRoot, speakLink, type DeskAccess, type Status } from "../backend";
+import { checkDeskAccess, getBackend, getStatus, getToken, listenerLink, protocolNotice, siteRoot, speakLink, type DeskAccess, type ProtocolNotice, type Status } from "../backend";
 import { englishName } from "../lib/languages";
 import { useWakeLock, wakeLockSupported } from "../lib/wakeLock";
 import { createDeskGate } from "../audio/speech-model";
@@ -653,7 +653,7 @@ function Intro() {
           If you end up in a blank terminal, click Set up live captions again.
         </p>
         <p className="text-gray-600">
-          Already set up? Open your sound desk link. Lost it? Click the setup link again, select the existing venue and it will be displayed.
+          Already set up? Open your sound desk link. Lost it, or updating? Open the setup again and sign in with the Google account that set this venue up, or with another account that can manage that same Google Cloud project. An account without that access will not see the venue.
         </p>
       </Card>
     </>
@@ -761,25 +761,24 @@ function Finished({
 function Notices({ status }: { status: Status | null | undefined }) {
   const [tipDismissed, setTipDismissed] = useState(() => localStorage.getItem(TIP_DISMISSED) === "1");
   const nodeMajor = status ? Number(status.node.split(".")[0]) : null;
-  const needsReinstall = status && (!protocolSupported(status) || (nodeMajor !== null && nodeMajor < MIN_NODE_MAJOR));
+  const nodeOld = nodeMajor !== null && nodeMajor < MIN_NODE_MAJOR;
+  const update: ProtocolNotice | null = !status ? null : nodeOld ? "major" : protocolNotice(status.protocol, status.protocolVersion);
   const down = status === null;
   const error = !!status?.error;
   const faster = !!status?.sonioxFasterRegion && !tipDismissed;
-  if (!down && !error && !needsReinstall && !faster) return null;
+  if (!down && !error && !update && !faster) return null;
   return (
     <div className="space-y-3">
       {down && (
         <Banner tone="warn">The captioning server isn't answering yet. If you've only just installed it, wait a minute and reload.</Banner>
       )}
       {error && <Banner tone="error">{status.error}</Banner>}
-      {needsReinstall && (
-        <Banner tone="warn">
-          The captioning server needs a one-time update. Click{" "}
-          <a className="underline text-blue-600 hover:text-blue-800" href={INSTALL_URL} target="_blank" rel="noreferrer">
-            Install on Google Cloud
-          </a>{" "}
-          again and click Run. Your links and QR code stay the same.
-        </Banner>
+      {update === "major" && (
+        <UpdateBanner tone="error">This server is too old for this version of captions, so they may not work.</UpdateBanner>
+      )}
+      {update === "patch" && <UpdateBanner tone="warn">A security fix is ready for this server.</UpdateBanner>}
+      {update === "minor" && (
+        <UpdateBanner tone="blue">A new feature is ready. Captions keep working as they are.</UpdateBanner>
       )}
       {status?.sonioxFasterRegion && !tipDismissed && (
         <Banner
@@ -801,6 +800,18 @@ function Notices({ status }: { status: Status | null | undefined }) {
         </Banner>
       )}
     </div>
+  );
+}
+
+function UpdateBanner({ tone, children }: { tone: "error" | "warn" | "blue"; children: string }) {
+  return (
+    <Banner tone={tone}>
+      {children}{" "}
+      <a className="underline text-blue-600 hover:text-blue-800" href={INSTALL_URL} target="_blank" rel="noreferrer">
+        Run the install again
+      </a>
+      . Sign in with the Google account that set this venue up, or with another account that can manage that same Google Cloud project. Your links and QR code stay the same.
+    </Banner>
   );
 }
 

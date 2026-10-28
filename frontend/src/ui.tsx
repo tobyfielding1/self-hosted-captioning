@@ -25,12 +25,13 @@ export function Button({
   );
 }
 
-export function Banner({ tone = "info", children, onClose }: { tone?: "info" | "warn" | "error" | "ok"; children: ReactNode; onClose?: () => void }) {
+export function Banner({ tone = "info", children, onClose }: { tone?: "info" | "warn" | "error" | "ok" | "blue"; children: ReactNode; onClose?: () => void }) {
   const tones = {
     info: "bg-white border-purple text-charcoal",
     warn: "bg-amber-50 border-amber-400 text-amber-950",
     error: "bg-red-50 border-red-400 text-red-950",
     ok: "bg-green-50 border-green-400 text-green-950",
+    blue: "bg-blue-50 border-blue-500 text-blue-950",
   };
   return (
     <div role={tone === "error" ? "alert" : "status"} className={`border-2 rounded-xl px-4 py-3 flex gap-3 items-start ${tones[tone]}`}>

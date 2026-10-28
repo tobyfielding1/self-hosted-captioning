@@ -1,5 +1,41 @@
 export const ORIGINAL = "original";
-export const SUPPORTED_PROTOCOLS = [4];
+/** Keep this in step with PROTOCOL_VERSION in the backend. */
+export const PROTOCOL_VERSION = "4.1.0";
+
+export interface ProtocolVersion {
+  major: number;
+  minor: number;
+  patch: number;
+}
+
+/** A whole number is an older server: major.0.0. */
+export function parseProtocol(value: unknown): ProtocolVersion | null {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return { major: value, minor: 0, patch: 0 };
+  if (typeof value !== "string") return null;
+  const semver = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);
+  if (semver) return { major: Number(semver[1]), minor: Number(semver[2]), patch: Number(semver[3]) };
+  const major = /^(\d+)$/.exec(value);
+  if (major) return { major: Number(major[1]), minor: 0, patch: 0 };
+  return null;
+}
+
+export type ProtocolNotice = "major" | "minor" | "patch";
+
+/**
+ * How this server compares with the page. A different major cannot be trusted.
+ * A lower minor is an optional feature. A lower patch is a security fix.
+ * A newer server needs nothing from the venue.
+ */
+export function protocolNotice(serverProtocol: unknown, serverVersion?: unknown, pageVersion = PROTOCOL_VERSION): ProtocolNotice | null {
+  const page = parseProtocol(pageVersion);
+  const server = parseProtocol(serverVersion) ?? parseProtocol(serverProtocol);
+  if (!page || !server) return "major";
+  if (server.major !== page.major) return "major";
+  if (server.minor < page.minor) return "minor";
+  if (server.minor > page.minor) return null;
+  if (server.patch < page.patch) return "patch";
+  return null;
+}
 
 /** Which sound desk link last opened Share. This does not grant access. */
 const SEEN_TOKEN = "captioning.seenToken";
@@ -23,7 +59,10 @@ export interface Status {
   /** A sound desk is connected right now. Missing on a server that hasn't updated yet. */
   streaming?: boolean;
   version: string;
+  /** Major protocol. Older servers send only this. */
   protocol: number;
+  /** Full semver. Missing until a server from this release starts. */
+  protocolVersion?: string;
   node: string;
   region: string | null;
   /** Google Cloud project this server runs in. Missing on a server that hasn't updated yet. */
@@ -151,4 +190,3 @@ export async function getLanguages(): Promise<Languages | null> {
   }
 }
 
-export const protocolSupported = (s: Status) => SUPPORTED_PROTOCOLS.includes(s.protocol);

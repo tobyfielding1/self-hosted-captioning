@@ -4,6 +4,8 @@
 
 This puts live captions on your Google account. It takes about 15 minutes. Google Cloud hosts the server. Normal use stays in the free tier, but Google still asks for a card, and the install emails you if this venue passes £5 a month. Soniox turns the speech into captions. You choose how much credit to add, and it is only used while someone is being captioned. That is the part that costs money, and it costs less than a captioning service you subscribe to.
 
+To update a venue later, sign in with the Google account that set it up, or with another account that can manage that same Google Cloud project. An account without that access will not see the venue.
+
 Click **Start**. The next page has one command to copy into the terminal.
 
 ## Run the install

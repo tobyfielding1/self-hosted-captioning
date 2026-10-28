@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from "react";
-import { getBackend, getLanguages, getStatus, ORIGINAL, protocolSupported, siteRoot, wsUrl, type Languages } from "../backend";
+import { getBackend, getLanguages, getStatus, ORIGINAL, protocolNotice, siteRoot, wsUrl, type Languages } from "../backend";
 import { label, orderLanguages } from "../lib/languages";
 import { HomeLink, RepoLink } from "../ui";
 import { useWakeLock } from "../lib/wakeLock";
@@ -134,7 +134,7 @@ export default function ListenView() {
       if (stopped || document.visibilityState !== "visible") return;
       if (status?.venue) setVenue(status.venue);
       setVenueSpoken(!!status?.spoken);
-      if (status && !protocolSupported(status)) return setPhase("outdated");
+      if (status && protocolNotice(status.protocol, status.protocolVersion) === "major") return setPhase("outdated");
       if (status?.live) return connect();
       setPhase("waiting");
       poll();
@@ -316,7 +316,8 @@ export default function ListenView() {
   else if (phase === "waiting") message = "Waiting for captions to start. This page will connect by itself.";
   else if (phase === "ended") message = "Captions have stopped.";
   else if (phase === "gave-up") message = "Captions haven't started yet.";
-  else if (phase === "outdated") message = "Captions need an update. Please ask the venue to re-run the install.";
+  else if (phase === "outdated")
+    message = "These captions need an update before they can run. Please ask the venue to run the install again, from the Google account that set the venue up.";
   else if (phase === "unsupported") message = "This language isn't available. Please choose another.";
   else if (paused) message = "Captions paused";
   else if (phase === "live" && empty) message = "Live. Captions will appear when someone speaks.";
@@ -468,7 +469,9 @@ function StatusNote({
   return (
     <>
       {notice && <p className="mt-4 text-base text-amber-700 dark:text-amber-400">{notice}</p>}
-      {message && <p className={`mt-6 ${empty ? "" : "text-base"} text-gray-500`}>{message}</p>}
+      {message && (
+        <p className={`mt-6 ${empty ? "" : "text-base"} ${phase === "outdated" ? "text-red-700 dark:text-red-300" : "text-gray-500"}`}>{message}</p>
+      )}
       {(phase === "ended" || phase === "gave-up") && (
         <button onClick={onRetry} className="mt-4 text-base underline text-blue-600 hover:text-blue-800 dark:text-blue-300">
           Check again

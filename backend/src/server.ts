@@ -12,8 +12,10 @@ import { googleTranslator, type Translator } from "./translate.js";
 declare const __VERSION__: string;
 const VERSION = typeof __VERSION__ === "string" ? __VERSION__ : "dev";
 
-// The page accepts only this version. Bump it when a running server should show the update banner until it starts again.
+// Major stays a number so a page from the previous release still accepts this server.
+// The full semver is what a current page compares. Bump minor for an optional feature, patch for a security fix, major when an old server cannot be trusted.
 export const PROTOCOL = 4;
+export const PROTOCOL_VERSION = "4.1.0";
 
 const MAX_FRAME = 64 * 1024;
 
@@ -60,6 +62,7 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
   const info = () => ({
     version: VERSION,
     protocol: PROTOCOL,
+    protocolVersion: PROTOCOL_VERSION,
     node: process.versions.node,
     region,
     project,
