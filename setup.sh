@@ -426,13 +426,13 @@ background() {
   [ -n "$setup_version" ] || die "reading the setup version"
   local attempt=0
   while :; do
-    # No Dockerfile: Cloud Run builds with its Node 26 image and patches that image later.
+    # No Dockerfile: Cloud Run builds with its Node 24 image and patches that image later.
     local drop=()
     # An explicit "no" removes the flag. Leaving it out of the update would keep the old value.
     if [ "${REMOVE_SPOKEN:-}" = "1" ]; then drop=(--remove-env-vars=SPOKEN); fi
     if gcloud run deploy "$SERVICE" \
       --source backend \
-      --base-image nodejs26 \
+      --base-image nodejs24 \
       --automatic-updates \
       --region "$REGION" \
       --allow-unauthenticated \

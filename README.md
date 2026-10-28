@@ -48,5 +48,5 @@ Rollback: run the **release** workflow manually with `ref` set to an older commi
 The app layer is built once per venue. `backend/boot.mjs` and the environment variables
 (`PORT`, `SONIOX_API_KEY`, `SONIOX_REGION`, `SPEAKER_TOKEN`, `BILLING_ACCOUNT`, `AUTO_UPDATE`, `VENUE_NAME`, `SPOKEN`, `SETUP_VERSION`)
 must stay compatible. `SPOKEN=1` turns spoken captions on; leave it unset and they stay off. `SETUP_VERSION` is the install that last ran. Leave it unset and the page treats that install as 1.0.0. Older servers ignore both.
-Cloud Run patches the Node 26 runtime and operating system on its own.
+Cloud Run patches the Node 24 runtime and operating system on its own.
 Moving to another Node major means venues re-run the install.
