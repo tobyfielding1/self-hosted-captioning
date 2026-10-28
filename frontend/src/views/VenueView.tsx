@@ -24,7 +24,7 @@ const DELETE_URL = shellUrl("delete.md");
 const SONIOX_PROJECT = "https://console.soniox.com/org/projects/settings";
 const SONIOX_KEYS = "https://console.soniox.com/org/projects/api/keys";
 // Venue images freeze their Node major version; below this they need a re-install.
-const MIN_NODE_MAJOR = 24;
+const MIN_NODE_MAJOR = 26;
 const TIP_DISMISSED = "captioning.fasterTipDismissed";
 
 /** The venue team's page: an intro, or the sound desk when the address is a sound desk link. */
