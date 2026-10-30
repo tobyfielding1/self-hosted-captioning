@@ -1,0 +1,651 @@
+import type { WebSocket } from "ws";
+import { Caption } from "./captions.js";
+import type { Catalog, ChirpVoice, Via } from "./catalog.js";
+import * as log from "./log.js";
+import { describeError, SonioxStream, wsUrl, type SonioxError, type SonioxToken } from "./soniox.js";
+import type { Translator } from "./translate.js";
+
+export const ORIGINAL = "original";
+
+export interface Timing {
+  silenceMs: number;
+  graceMs: number;
+  idleMs: number;
+  testMs: number;
+  statsMs: number;
+  sweepMs: number;
+}
+
+export const DEFAULT_TIMING: Timing = {
+  silenceMs: 15_000,
+  graceMs: 60_000,
+  idleMs: 60 * 60_000,
+  testMs: 60_000,
+  statsMs: 3_000,
+  sweepMs: 1_000,
+};
+
+interface Room {
+  code: string;
+  via: Via | "original";
+  listeners: Set<WebSocket>;
+  /** Listeners who turned sound on. They share one spoken stream. */
+  audio: Set<WebSocket>;
+  caption: Caption;
+  /** Spoken words from a Soniox translation stream, shown in the second box. */
+  spoken: Caption;
+  chain: Promise<void>;
+  /** When a listener who played every clip of this language would finish. */
+  playoutEndsAt: number;
+  /** Speaking rate of the last clip. The next clip may move by at most 0.1. */
+  lastSpeakingRate: number;
+}
+
+/** Pause settings for every Soniox stream. The sound desk sends these; the page owns the defaults. */
+export interface EndpointSettings {
+  endpointDelayMs: number;
+  endpointSensitivity: number;
+  endpointLatency: number;
+}
+
+export interface HubOptions {
+  key: string;
+  catalog: Catalog;
+  translator: Translator | null;
+  /** Speaks one finished line. Null when this venue has not turned spoken captions on. */
+  speaker?: ((text: string, voice: ChirpVoice, speakingRate: number) => Promise<Buffer>) | null;
+  timing?: Partial<Timing>;
+  info?: () => Record<string, unknown>;
+}
+
+const base = (code?: string) => (code ?? "").toLowerCase().split(/[-_]/)[0];
+const isMarker = (text: string) => /^<[a-z]+>$/.test(text);
+
+/** Chirp's MP3 is 32 kbps, so the file's length is the time a phone spends playing it. */
+const MP3_BYTES_PER_SECOND = 32_000 / 8;
+
+/** Normal spoken pace. Catch-up may raise it toward 2. */
+export const BASE_SPEAKING_RATE = 0.8;
+
+/**
+ * Pace for a language that is still playing earlier lines.
+ * 0.8 when caught up, rising toward Chirp's maximum of 2 as the listener falls behind.
+ * Each clip may move by at most 0.1 from the previous clip, so the voice does not jump.
+ */
+export function speakingRate(backlogMs: number, previous = BASE_SPEAKING_RATE): number {
+  const target =
+    backlogMs <= 0 ? BASE_SPEAKING_RATE : Math.min(2, Math.round((BASE_SPEAKING_RATE + backlogMs / 10_000) * 100) / 100);
+  return Math.round(Math.min(previous + 0.1, Math.max(previous - 0.1, target)) * 100) / 100;
+}
+
+interface TokenPart {
+  final: string;
+  partial: string;
+  spokenFinal: string;
+  spokenPartial: string;
+  /** Close the paragraph. Set when Soniox sends `<end>`. */
+  endpoint: boolean;
+  langs: Map<string, number>;
+}
+
+const blankPart = (): TokenPart => ({
+  final: "",
+  partial: "",
+  spokenFinal: "",
+  spokenPartial: "",
+  endpoint: false,
+  langs: new Map(),
+});
+
+/** Split a Soniox message on `<end>`. Words after the pause start the next paragraph. */
+function partsOf(key: string, tokens: SonioxToken[]): TokenPart[] {
+  const parts: TokenPart[] = [];
+  let cur = blankPart();
+  const push = (endpoint: boolean) => {
+    cur.endpoint = endpoint;
+    parts.push(cur);
+    cur = blankPart();
+  };
+  for (const t of tokens) {
+    if (isMarker(t.text)) {
+      if (t.text === "<end>" && t.is_final) push(true);
+      continue;
+    }
+    const spoken = t.translation_status !== "translation";
+    const show = key === ORIGINAL || t.translation_status === "translation" || (t.translation_status !== "original" && base(t.language) === base(key));
+    if (show) {
+      if (t.is_final) cur.final += t.text;
+      else cur.partial += t.text;
+    }
+    if (spoken) {
+      if (t.is_final) {
+        cur.spokenFinal += t.text;
+        if (t.language) cur.langs.set(t.language, (cur.langs.get(t.language) ?? 0) + t.text.length);
+      } else cur.spokenPartial += t.text;
+    }
+  }
+  if (cur.final || cur.partial || cur.spokenFinal || cur.spokenPartial || cur.endpoint) parts.push(cur);
+  return parts.length ? parts : [cur];
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+export function parseEndpoint(raw: unknown): EndpointSettings | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const delay = Number(o.endpointDelayMs ?? o.delayMs);
+  const sensitivity = Number(o.endpointSensitivity ?? o.sensitivity);
+  const latency = Number(o.endpointLatency ?? o.latency);
+  if (![delay, sensitivity, latency].every(Number.isFinite)) return null;
+  return {
+    endpointDelayMs: clamp(Math.round(delay), 500, 3000),
+    endpointSensitivity: clamp(Math.round(sensitivity * 100) / 100, -1, 1),
+    endpointLatency: clamp(Math.round(latency), 0, 3),
+  };
+}
+
+function send(ws: WebSocket | null, msg: unknown) {
+  if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+}
+
+function languageName(code: string): string {
+  if (code === ORIGINAL) return "the original language";
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+/**
+ * Everything for one venue: the sound desk connection, listeners grouped by language, and the
+ * Soniox streams. Streams exist only while the speaker is live, not paused, someone needs that
+ * language, and audio has arrived in the last `silenceMs`.
+ */
+export class Hub {
+  live = false;
+  paused = false;
+  /** A sound desk websocket is connected. False during the grace period after it drops. */
+  get streaming(): boolean {
+    return this.speaker !== null;
+  }
+  readonly errors: { at: string; message: string }[] = [];
+
+  private speaker: WebSocket | null = null;
+  private graceTimer?: NodeJS.Timeout;
+  private lastSpeechAt = 0;
+  private testUntil = 0;
+  private rooms = new Map<string, Room>();
+  private streams = new Map<string, SonioxStream>();
+  private backoff = new Map<string, { until: number; delay: number }>();
+  private preview = new Caption();
+  /** Transcript of the original stream. Shared with the Original page and Google bilingual boxes. */
+  private spoken = new Caption();
+  private pending = { text: "", langs: new Map<string, number>() };
+  private withOriginal = new Set<WebSocket>();
+  private timers: NodeJS.Timeout[];
+  private timing: Timing;
+  /** Unset until the sound desk sends pause settings. */
+  private endpoint: EndpointSettings | null = null;
+
+  constructor(private opts: HubOptions) {
+    this.timing = { ...DEFAULT_TIMING, ...opts.timing };
+    this.timers = [
+      setInterval(() => this.sweep(), this.timing.sweepMs),
+      setInterval(() => this.sendStats(), this.timing.statsMs),
+    ];
+    for (const t of this.timers) t.unref();
+  }
+
+  /** Current pause settings, or null until the sound desk has sent them. */
+  endpointSettings(): EndpointSettings | null {
+    return this.endpoint ? { ...this.endpoint } : null;
+  }
+
+  close() {
+    for (const t of this.timers) clearInterval(t);
+    this.endSession("ended");
+  }
+
+  // ---------------------------------------------------------------- speaker
+
+  attachSpeaker(ws: WebSocket) {
+    if (this.speaker) {
+      const old = this.speaker;
+      this.speaker = null;
+      send(old, { type: "stopped", reason: "takeover" });
+      old.close(4000, "takeover");
+    }
+    clearTimeout(this.graceTimer);
+    this.speaker = ws;
+    this.live = true;
+    this.lastSpeechAt = Date.now();
+    log.info("speaker connected");
+
+    ws.on("message", (data, isBinary) => {
+      if (ws !== this.speaker) return;
+      if (isBinary) this.onAudio(data as Buffer);
+      else this.onSpeakerMessage(data.toString());
+    });
+    ws.on("close", () => this.onSpeakerClose(ws));
+
+    send(ws, { type: "hello", paused: this.paused, errors: this.errors, ...this.opts.info?.() });
+    if (this.opts.catalog.error) send(ws, { type: "error", message: this.opts.catalog.error });
+    this.sendStats();
+  }
+
+  private onSpeakerMessage(text: string) {
+    let msg: { type?: string; paused?: boolean };
+    try {
+      msg = JSON.parse(text);
+    } catch {
+      return;
+    }
+    if (msg.type === "stop") this.endSession("stopped");
+    else if (msg.type === "pause") this.setPaused(!!msg.paused);
+    else if (msg.type === "test") {
+      this.testUntil = Date.now() + this.timing.testMs;
+      this.sendStats();
+    } else if (msg.type === "endpoint") {
+      const next = parseEndpoint(msg);
+      if (next) this.setEndpoint(next);
+    }
+  }
+
+  private setEndpoint(next: EndpointSettings) {
+    if (
+      this.endpoint &&
+      next.endpointDelayMs === this.endpoint.endpointDelayMs &&
+      next.endpointSensitivity === this.endpoint.endpointSensitivity &&
+      next.endpointLatency === this.endpoint.endpointLatency
+    ) {
+      return;
+    }
+    this.endpoint = next;
+    log.info("endpoint settings", {
+      endpointDelayMs: next.endpointDelayMs,
+      endpointSensitivity: next.endpointSensitivity,
+      endpointLatency: next.endpointLatency,
+    });
+    for (const [key, stream] of this.streams) {
+      stream.finish();
+      this.streams.delete(key);
+      log.info("stream closed", { lang: key, why: "endpoint settings" });
+    }
+    send(this.speaker, { type: "endpoint", ...this.endpoint });
+  }
+
+  private onSpeakerClose(ws: WebSocket) {
+    if (ws !== this.speaker) return;
+    this.speaker = null;
+    if (!this.live) return;
+    log.info("speaker dropped, grace period started");
+    this.graceTimer = setTimeout(() => this.endSession("ended"), this.timing.graceMs);
+  }
+
+  private setPaused(paused: boolean) {
+    if (paused === this.paused) return;
+    this.paused = paused;
+    log.info(paused ? "paused" : "resumed");
+    if (paused)
+      for (const room of this.rooms.values()) {
+        room.playoutEndsAt = 0;
+        room.lastSpeakingRate = BASE_SPEAKING_RATE;
+      }
+    for (const room of this.rooms.values()) for (const ws of room.listeners) send(ws, { type: "paused", paused });
+    if (paused) this.reconcile();
+    this.sendStats();
+  }
+
+  endSession(reason: "stopped" | "ended" | "idle") {
+    const wasLive = this.live;
+    this.live = false;
+    this.paused = false;
+    this.testUntil = 0;
+    clearTimeout(this.graceTimer);
+    const speaker = this.speaker;
+    this.speaker = null;
+    if (speaker) {
+      send(speaker, { type: "stopped", reason });
+      speaker.close(1000, reason);
+    }
+    for (const s of this.streams.values()) s.finish();
+    this.streams.clear();
+    const rooms = [...this.rooms.values()];
+    this.rooms.clear();
+    for (const room of rooms)
+      for (const ws of room.listeners) {
+        send(ws, { type: "ended" });
+        ws.close(1000, "ended");
+      }
+    this.preview = new Caption();
+    this.spoken = new Caption();
+    this.pending = { text: "", langs: new Map() };
+    this.withOriginal.clear();
+    this.backoff.clear();
+    if (wasLive) log.info("session ended", { reason });
+  }
+
+  // -------------------------------------------------------------- listeners
+
+  attachListener(ws: WebSocket, code: string, withOriginal = false, audio = false) {
+    if (!this.live) {
+      ws.close(4404, "not-live");
+      return;
+    }
+    const via = code === ORIGINAL ? "original" : this.opts.catalog.via(code);
+    if (!via) {
+      ws.close(4400, "unsupported");
+      return;
+    }
+    let room = this.rooms.get(code);
+    if (!room) {
+      room = {
+        code,
+        via,
+        listeners: new Set(),
+        audio: new Set(),
+        caption: code === ORIGINAL ? this.spoken : new Caption(),
+        spoken: new Caption(),
+        chain: Promise.resolve(),
+        playoutEndsAt: 0,
+        lastSpeakingRate: BASE_SPEAKING_RATE,
+      };
+      this.rooms.set(code, room);
+    }
+    const bilingual = withOriginal && via !== "original";
+    if (bilingual) this.withOriginal.add(ws);
+    room.listeners.add(ws);
+    if (audio) room.audio.add(ws);
+    send(ws, { type: "hello", via, paused: this.paused, bilingual });
+    const original = bilingual ? (via === "google" ? this.spoken : room.spoken).snapshot() : undefined;
+    send(ws, { type: "history", ...room.caption.snapshot(), ...(original ? { original } : {}) });
+    ws.on("close", () => this.onListenerLeave(code, ws));
+    this.sendStats();
+  }
+
+  private onListenerLeave(code: string, ws: WebSocket) {
+    this.withOriginal.delete(ws);
+    const room = this.rooms.get(code);
+    if (!room?.listeners.delete(ws)) return;
+    room.audio.delete(ws);
+    if (room.audio.size === 0) {
+      room.playoutEndsAt = 0;
+      room.lastSpeakingRate = BASE_SPEAKING_RATE;
+    }
+    this.reconcile();
+    this.sendStats();
+  }
+
+  // ------------------------------------------------------------------ audio
+
+  private googleListeners(): boolean {
+    for (const room of this.rooms.values()) if (room.via === "google" && room.listeners.size > 0) return true;
+    return false;
+  }
+
+  /** One original stream for the Original page, Google Translate, and test captions. */
+  private needsOriginal(): boolean {
+    if (this.testUntil > Date.now()) return true;
+    if (this.googleListeners()) return true;
+    for (const room of this.rooms.values()) if (room.via === "original" && room.listeners.size > 0) return true;
+    return false;
+  }
+
+  private needed(key: string): boolean {
+    if (!this.live || this.paused) return false;
+    if (key === ORIGINAL) return this.needsOriginal();
+    const room = this.rooms.get(key);
+    return !!room && room.via === "soniox" && room.listeners.size > 0;
+  }
+
+  /** Finish any stream nobody needs any more. */
+  private reconcile() {
+    for (const [key, stream] of this.streams)
+      if (!this.needed(key)) {
+        stream.finish();
+        this.streams.delete(key);
+        log.info("stream closed", { lang: key, why: "not needed" });
+      }
+  }
+
+  private onAudio(frame: Buffer) {
+    if (!this.live || this.paused || frame.length === 0 || frame.length % 2 !== 0) return;
+    this.lastSpeechAt = Date.now();
+    const keys = new Set<string>([ORIGINAL, ...this.rooms.keys()]);
+    for (const key of keys) {
+      if (!this.needed(key)) continue;
+      const stream = this.streams.get(key) ?? this.openStream(key);
+      stream?.send(frame);
+    }
+  }
+
+  private openStream(key: string): SonioxStream | null {
+    if (!this.endpoint) return null;
+    const now = Date.now();
+    const backoff = this.backoff.get(key);
+    if (backoff && backoff.until > now) return null;
+    const { catalog } = this.opts;
+    if (!catalog.model) {
+      this.backoff.set(key, { until: now + 5_000, delay: 5_000 });
+      this.recordError(catalog.error ?? "Still connecting to Soniox. Captions will start in a moment.");
+      return null;
+    }
+    const stream = new SonioxStream(wsUrl(catalog.sonioxRegion ?? ""), this.opts.key, {
+      model: catalog.model,
+      targetLanguage: key === ORIGINAL ? undefined : key,
+      endpointDetection: true,
+      ...this.endpoint,
+    });
+    this.streams.set(key, stream);
+    log.info("stream opened", { lang: key });
+    stream.on("tokens", (tokens: SonioxToken[]) => this.onTokens(key, tokens));
+    stream.on("error", (err: SonioxError) => this.onStreamError(key, stream, err));
+    stream.on("closed", () => {
+      if (this.streams.get(key) === stream) this.streams.delete(key);
+    });
+    return stream;
+  }
+
+  private onStreamError(key: string, stream: SonioxStream, err: SonioxError) {
+    if (this.streams.get(key) === stream) this.streams.delete(key);
+    log.warn("stream error", { lang: key, ...err });
+    const { message, retryMs } = describeError(err, languageName(key));
+    if (retryMs === 0) return;
+    const prev = this.backoff.get(key);
+    const delay = prev ? Math.min(Math.max(prev.delay * 2, retryMs), 60_000) : retryMs;
+    this.backoff.set(key, { until: Date.now() + delay, delay });
+    this.recordError(message);
+    for (const room of this.rooms.values()) {
+      let notice: string | null = null;
+      if (key === ORIGINAL) {
+        if (room.via === "original") notice = "Captions temporarily unavailable";
+        else if (room.via === "google") notice = "Translation temporarily unavailable";
+      } else if (room.code === key) {
+        notice = "Translation temporarily unavailable";
+      }
+      if (notice) for (const ws of room.listeners) send(ws, { type: "error", message: notice });
+    }
+  }
+
+  private recordError(message: string) {
+    this.errors.push({ at: new Date().toISOString(), message });
+    if (this.errors.length > 20) this.errors.shift();
+    log.error(message);
+    send(this.speaker, { type: "error", message });
+  }
+
+  // --------------------------------------------------------------- captions
+
+  /** Which stream the sound desk preview follows. */
+  private previewKey(): string | null {
+    if (this.streams.has(ORIGINAL)) return ORIGINAL;
+    for (const key of this.streams.keys()) return key;
+    return null;
+  }
+
+  private onTokens(key: string, tokens: SonioxToken[]) {
+    this.backoff.delete(key);
+    const room = this.rooms.get(key);
+    for (const part of partsOf(key, tokens)) {
+      if (key === ORIGINAL) {
+        const paragraph = this.write(this.spoken, part.final, part.partial, part.endpoint);
+        if (room) this.publish(this.spoken, [...room.listeners], "caption", paragraph);
+        const beside = this.googleOriginalListeners();
+        if (beside.length) this.publish(this.spoken, beside, "original");
+        if (this.previewKey() === ORIGINAL) this.sendPreview(this.spoken);
+        this.feedGoogle(part.spokenFinal, part.langs, part.endpoint);
+        continue;
+      }
+      if (room?.via === "soniox") {
+        const paragraph = this.write(room.caption, part.final, part.partial, part.endpoint);
+        this.publish(room.caption, [...room.listeners], "caption", paragraph);
+        if (paragraph) this.scheduleSpeech(room, paragraph);
+        this.write(room.spoken, part.spokenFinal, part.spokenPartial, part.endpoint);
+        this.publish(room.spoken, [...room.listeners].filter((ws) => this.withOriginal.has(ws)), "original");
+      }
+      if (this.previewKey() === key) {
+        this.write(this.preview, part.spokenFinal, part.spokenPartial, part.endpoint);
+        this.sendPreview(this.preview);
+      }
+    }
+  }
+
+  private googleOriginalListeners(): WebSocket[] {
+    const out: WebSocket[] = [];
+    for (const room of this.rooms.values()) {
+      if (room.via !== "google") continue;
+      for (const ws of room.listeners) if (this.withOriginal.has(ws)) out.push(ws);
+    }
+    return out;
+  }
+
+  /** Appends final text. A pause closes the paragraph and returns it. */
+  private write(caption: Caption, final: string, partial: string, endpoint: boolean): string | null {
+    caption.partial = partial;
+    if (final) caption.addFinal(final);
+    return endpoint ? caption.paragraph() : null;
+  }
+
+  private publish(caption: Caption, listeners: WebSocket[], kind: "caption" | "original", paragraph: string | null = null) {
+    const snap = caption.snapshot();
+    for (const ws of listeners) {
+      if (kind === "original") send(ws, { type: "original", ...snap });
+      else {
+        if (paragraph) send(ws, { type: "line", text: paragraph });
+        send(ws, { type: "caption", current: snap.current, partial: snap.partial });
+      }
+    }
+  }
+
+  private sendPreview(caption: Caption) {
+    const snap = caption.snapshot();
+    send(this.speaker, { type: "preview", lines: snap.lines.slice(-3), current: snap.current, partial: snap.partial });
+  }
+
+  /** Each pause on the original stream is translated once, for every Google listener. */
+  private feedGoogle(final: string, langs: Map<string, number>, endpoint: boolean) {
+    const rooms = [...this.rooms.values()].filter((r) => r.via === "google" && r.listeners.size > 0);
+    if (!rooms.length) {
+      this.pending = { text: "", langs: new Map() };
+      return;
+    }
+    this.pending.text += final;
+    for (const [lang, n] of langs) this.pending.langs.set(lang, (this.pending.langs.get(lang) ?? 0) + n);
+
+    const text = this.pending.text.trim();
+    const complete = endpoint && text.length > 0;
+    if (!complete) {
+      for (const room of rooms) this.markWaiting(room, text.length > 0);
+      return;
+    }
+
+    const source = [...this.pending.langs.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const chunk = text;
+    this.pending = { text: "", langs: new Map() };
+    for (const room of rooms) {
+      this.markWaiting(room, true);
+      room.chain = room.chain.then(() => this.translateInto(room, chunk, source));
+    }
+  }
+
+  private markWaiting(room: Room, waiting: boolean) {
+    const partial = waiting ? "…" : "";
+    if (room.caption.partial === partial) return;
+    room.caption.partial = partial;
+    this.publish(room.caption, [...room.listeners], "caption");
+  }
+
+  private async translateInto(room: Room, text: string, source?: string) {
+    let out: string;
+    try {
+      if (!this.opts.translator) throw new Error("Google Translate isn't set up on this server");
+      out = await this.opts.translator.translate(text, room.code, source);
+    } catch (e) {
+      this.recordError(`Google Translate failed for ${languageName(room.code)}: ${(e as Error).message}`);
+      out = `${text} (translation unavailable)`;
+    }
+    const paragraph = this.write(room.caption, out.trim(), this.pending.text.trim() ? "…" : "", true);
+    this.publish(room.caption, [...room.listeners], "caption", paragraph);
+    if (paragraph) await this.say(room, paragraph);
+  }
+
+  /** Queue this line behind any speech already in progress for the room. */
+  private scheduleSpeech(room: Room, text: string) {
+    room.chain = room.chain.then(() => this.say(room, text));
+  }
+
+  /** One synthesis for every phone that has sound on for this language. */
+  private async say(room: Room, text: string) {
+    const voice = this.opts.catalog.chirpVoice(room.code);
+    if (!voice || !this.opts.speaker || !this.live || this.paused || !room.audio.size || !text.trim()) return;
+    const rate = speakingRate(room.playoutEndsAt - Date.now(), room.lastSpeakingRate);
+    let audio: Buffer;
+    try {
+      audio = await this.opts.speaker(text, voice, rate);
+    } catch (e) {
+      log.warn("speech failed", { lang: room.code, err: String(e) });
+      return;
+    }
+    if (!this.live || this.paused || !room.audio.size) return;
+    const now = Date.now();
+    room.lastSpeakingRate = rate;
+    room.playoutEndsAt = Math.max(room.playoutEndsAt, now) + (audio.length / MP3_BYTES_PER_SECOND) * 1000;
+    const msg = { type: "audio", audio: audio.toString("base64") };
+    for (const ws of room.audio) send(ws, msg);
+  }
+
+  // ------------------------------------------------------------ housekeeping
+
+  private sweep() {
+    const now = Date.now();
+    for (const [key, stream] of this.streams)
+      if (now - stream.lastAudioAt > this.timing.silenceMs || !this.needed(key)) {
+        stream.finish();
+        this.streams.delete(key);
+        log.info("stream closed", { lang: key, why: "silence" });
+      }
+    if (this.speaker && now - this.lastSpeechAt > this.timing.idleMs) {
+      log.info("speaker idle cutoff");
+      this.endSession("idle");
+    }
+  }
+
+  stats() {
+    const listeners: Record<string, number> = {};
+    for (const room of this.rooms.values()) if (room.listeners.size) listeners[room.code] = room.listeners.size;
+    return {
+      live: this.live,
+      paused: this.paused,
+      listeners,
+      streams: [...this.streams.keys()],
+      testing: this.testUntil > Date.now(),
+    };
+  }
+
+  private sendStats() {
+    send(this.speaker, { type: "stats", ...this.stats() });
+  }
+}

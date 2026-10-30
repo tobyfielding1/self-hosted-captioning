@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit, tag or branch to publish (use an older commit to roll back)
+        required: false
+        default: main
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Use the requested commit (rollback)
+        if: inputs.ref
+        run: git checkout --detach "$REF"
+        env:
+          REF: ${{ inputs.ref }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          VERSION=$(git rev-parse --short=12 HEAD) npm run bundle
+          sha256sum server.mjs > server.mjs.sha256
+          # The bundle must load and export the launcher contract.
+          node -e "import('./server.mjs').then(m => { if (typeof m.start !== 'function' || typeof m.stop !== 'function') process.exit(1) })"
+
+      - name: Frontend
+        working-directory: frontend
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: frontend/dist
+
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend
+          path: |
+            backend/server.mjs
+            backend/server.mjs.sha256
+
+  pages:
+    needs: check
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5
+
+  backend:
+    needs: check
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: backend
+
+      - name: Publish to backend-latest
+        run: |
+          gh release view backend-latest >/dev/null 2>&1 || gh release create backend-latest \
+            --title "Backend (latest)" --latest=false \
+            --notes "Venues' servers download server.mjs from here each time they start. Published automatically by CI."
+          gh release upload backend-latest server.mjs server.mjs.sha256 --clobber
+          echo "Published $(cut -c1-12 server.mjs.sha256)" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,13 @@
+# New sound desk link
+
+## Rotate
+
+Use this if the sound desk link was shared with someone who shouldn't have it. It issues a new link and the old one stops working. The QR code and audience link do not change.
+
+Click the **copy** button on the box below (it pastes into the terminal at the bottom of the screen), then press **Enter**. Use the venue Google account.
+
+```bash
+./setup.sh --rotate-token
+```
+
+When the terminal says **Done!**, open the new link it prints. Bookmark it as "Captions" on each sound desk computer. The old bookmark stops working.

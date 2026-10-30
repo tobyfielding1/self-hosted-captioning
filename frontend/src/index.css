@@ -1,0 +1,29 @@
+@import "tailwindcss";
+@import "@fontsource/libre-franklin/latin-400.css";
+@import "@fontsource/libre-franklin/latin-600.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Libre Franklin", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-caption: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-weight-bold: 600;
+
+  --color-veil: #daffed;
+  --color-accent: #9bf3f0;
+  --color-leaf: #adfc92;
+  --color-purple: #473198;
+  --color-charcoal: #2c2a32;
+  --color-midnight: #4a0d67;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
