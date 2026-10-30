@@ -37,7 +37,7 @@ interface Room {
   chain: Promise<void>;
   /** When a listener who played every clip of this language would finish. */
   playoutEndsAt: number;
-  /** Speaking rate of the last clip. The next clip may move by at most 0.1. */
+  /** Speaking rate of the last clip. The next clip may move by at most 0.05. */
   lastSpeakingRate: number;
 }
 
@@ -67,15 +67,18 @@ const MP3_BYTES_PER_SECOND = 32_000 / 8;
 /** Normal spoken pace. Catch-up may raise it toward 2. */
 export const BASE_SPEAKING_RATE = 0.8;
 
+/** How far one clip may move from the previous clip, so the voice does not jump. */
+const RATE_STEP = 0.05;
+
 /**
  * Pace for a language that is still playing earlier lines.
  * 0.8 when caught up, rising toward Chirp's maximum of 2 as the listener falls behind.
- * Each clip may move by at most 0.1 from the previous clip, so the voice does not jump.
+ * Each clip may move by at most 0.05 from the previous clip.
  */
 export function speakingRate(backlogMs: number, previous = BASE_SPEAKING_RATE): number {
   const target =
     backlogMs <= 0 ? BASE_SPEAKING_RATE : Math.min(2, Math.round((BASE_SPEAKING_RATE + backlogMs / 10_000) * 100) / 100);
-  return Math.round(Math.min(previous + 0.1, Math.max(previous - 0.1, target)) * 100) / 100;
+  return Math.round(Math.min(previous + RATE_STEP, Math.max(previous - RATE_STEP, target)) * 100) / 100;
 }
 
 interface TokenPart {

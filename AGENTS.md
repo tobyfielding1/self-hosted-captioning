@@ -26,7 +26,7 @@ Level 3 with a 1 second cap splits sentences in half. That was tried and rejecte
 
 ## Spoken captions
 
-Off unless the venue answered yes at install (`SPOKEN=1`). Pace starts at 0.8 and may rise toward 2, by at most 0.1 per clip, only while that language is still playing earlier lines. It returns to 0.8 when the last listener turns sound off or the desk pauses.
+Off unless the venue answered yes at install (`SPOKEN=1`). Pace starts at 0.8 and may rise toward 2, by at most 0.05 per clip, only while that language is still playing earlier lines. It returns to 0.8 when the last listener turns sound off or the desk pauses.
 
 ## Two version numbers
 

@@ -196,14 +196,14 @@ afterEach(async () => {
 });
 
 describe("speaking rate", () => {
-  it("stays at 0.8 until the listener is behind, then rises toward 2 by at most 0.1", () => {
+  it("stays at 0.8 until the listener is behind, then rises toward 2 by at most 0.05", () => {
     expect(speakingRate(0)).toBe(0.8);
     expect(speakingRate(-1)).toBe(0.8);
-    expect(speakingRate(5_000)).toBe(0.9);
-    expect(speakingRate(5_000, 0.9)).toBe(1);
+    expect(speakingRate(5_000)).toBe(0.85);
+    expect(speakingRate(5_000, 0.9)).toBe(0.95);
     expect(speakingRate(5_000, 1.3)).toBe(1.3);
-    expect(speakingRate(12_000, 1.9)).toBe(2);
-    expect(speakingRate(0, 1.3)).toBe(1.2);
+    expect(speakingRate(12_000, 1.95)).toBe(2);
+    expect(speakingRate(0, 1.3)).toBe(1.25);
     expect(speakingRate(30_000, 2)).toBe(2);
   });
 });
@@ -383,7 +383,7 @@ describe("cost guard", () => {
     const spanish = rates.filter((r) => r.voice.startsWith("es")).map((r) => r.rate);
     const english = rates.filter((r) => r.voice.startsWith("en")).map((r) => r.rate);
     expect(spanish[0]).toBe(0.8);
-    expect(spanish[1]).toBe(0.9);
+    expect(spanish[1]).toBe(0.85);
     expect(english[0]).toBe(0.8);
     expect(english[1]).toBe(0.8);
   });
