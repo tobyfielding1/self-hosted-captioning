@@ -242,6 +242,52 @@ describe("catalog", () => {
     expect(pickChirpVoice(voices, "no")?.languageCode).toBe("nb-NO");
     expect(pickChirpVoice(voices, "fa")).toBeNull();
   });
+
+  it("marks a language spoken from the voice index, and replaces that index with the list", () => {
+    app.catalog.sonioxTargets = new Set(["en", "zh", "zh-TW", "fa", "es"]);
+    app.catalog.googleTargets = new Set();
+    app.catalog.chirpVoices = [
+      { name: "en-US-Wavenet-A", languageCode: "en-US" },
+      { name: "fa-IR-Wavenet-A", languageCode: "fa-IR" },
+      { name: "en-GB-Chirp3-HD-Achird", languageCode: "en-GB" },
+      { name: "en-US-Chirp3-HD-Charon", languageCode: "en-US" },
+      { name: "cmn-CN-Chirp3-HD-Aoede", languageCode: "cmn-CN" },
+    ];
+    const audio = () =>
+      new Map(
+        app.catalog.languages().targets.map((t) => [t.code, "audio" in t ? t.audio : undefined]),
+      );
+    expect(audio()).toEqual(
+      new Map<string, true | undefined>([
+        ["en", true],
+        ["zh", true],
+        ["zh-TW", true],
+        ["fa", undefined],
+        ["es", undefined],
+      ]),
+    );
+    expect(app.catalog.chirpVoice("en-GB")?.name).toBe("en-GB-Chirp3-HD-Achird");
+    expect(app.catalog.chirpVoice("en")?.name).toBe("en-US-Chirp3-HD-Charon");
+    expect(app.catalog.chirpVoice("zh")?.languageCode).toBe("cmn-CN");
+    expect(app.catalog.chirpVoice("fa")).toBeNull();
+
+    app.catalog.chirpVoices = Array.from({ length: 1590 }, (_, i) => ({
+      name: `en-US-Chirp3-HD-V${i}`,
+      languageCode: "en-US",
+    }));
+    const started = performance.now();
+    const listed = app.catalog.languages();
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(listed.targets.find((t) => t.code === "en")).toMatchObject({ audio: true });
+    expect(listed.targets.find((t) => t.code === "zh" && "audio" in t)).toBeUndefined();
+
+    app.catalog.chirpVoices = [{ name: "es-ES-Chirp3-HD-Charon", languageCode: "es-ES" }];
+    expect(app.catalog.chirpVoice("es")?.name).toBe("es-ES-Chirp3-HD-Charon");
+    expect(app.catalog.chirpVoice("en")).toBeNull();
+    expect(audio().get("es")).toBe(true);
+    expect(audio().get("en")).toBeUndefined();
+    expect(audio().get("zh")).toBeUndefined();
+  });
 });
 
 describe("cost guard", () => {

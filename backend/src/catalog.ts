@@ -90,6 +90,28 @@ export class Catalog {
   chirpVoices: ChirpVoice[] = [];
   error: string | null = null;
   private timer?: NodeJS.Timeout;
+  /** Voices grouped by language root. Rebuilt when `chirpVoices` is a new array. */
+  private voicesByRoot: Map<string, ChirpVoice[]> | null = null;
+  private indexedVoices: ChirpVoice[] | null = null;
+
+  /**
+   * One pass over the voice list. Scanning it again for every audience language
+   * builds a locale per pair and takes seconds on each /languages request.
+   */
+  private voiceIndex(): Map<string, ChirpVoice[]> {
+    if (this.indexedVoices === this.chirpVoices && this.voicesByRoot) return this.voicesByRoot;
+    const index = new Map<string, ChirpVoice[]>();
+    for (const voice of this.chirpVoices) {
+      if (!voice.name.includes("Chirp3-HD")) continue;
+      const root = languageRoot(voice.languageCode);
+      const bucket = index.get(root);
+      if (bucket) bucket.push(voice);
+      else index.set(root, [voice]);
+    }
+    this.voicesByRoot = index;
+    this.indexedVoices = this.chirpVoices;
+    return index;
+  }
 
   constructor(private key: string) {}
 
@@ -160,7 +182,8 @@ export class Catalog {
 
   /** Chirp 3 HD voice for this audience language, or null when Chirp has none. */
   chirpVoice(code: string): ChirpVoice | null {
-    return pickChirpVoice(this.chirpVoices, code);
+    const bucket = this.voiceIndex().get(languageRoot(code));
+    return bucket ? pickChirpVoice(bucket, code) : null;
   }
 
   /** Voices share the catalog timer. Skipped unless this venue turned spoken captions on. */
@@ -205,9 +228,10 @@ export class Catalog {
       google.push({ code, via: "google", name: this.googleNames.get(code) });
     }
     const targets = [...[...this.sonioxTargets].map((code) => ({ code, via: "soniox" as const })), ...google];
+    const spoken = this.voiceIndex();
     return {
       speech: this.speech,
-      targets: targets.map((t) => (this.chirpVoice(t.code) ? { ...t, audio: true as const } : t)),
+      targets: targets.map((t) => (spoken.has(languageRoot(t.code)) ? { ...t, audio: true as const } : t)),
     };
   }
 }
