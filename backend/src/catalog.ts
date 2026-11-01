@@ -162,7 +162,11 @@ export class Catalog {
   private async refreshGoogle() {
     const project = await gcp.projectId();
     const token = await gcp.accessToken();
-    if (!project || !token) return;
+    if (!project || !token) {
+      const msg = "Google Translation catalog unavailable: project or access token missing";
+      log.warn("google catalog failed", { err: msg });
+      throw new Error(msg);
+    }
     try {
       const res = await fetch(
         `https://translation.googleapis.com/v3/projects/${project}/locations/global/supportedLanguages?displayLanguageCode=en`,
