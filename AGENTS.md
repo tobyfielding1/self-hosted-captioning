@@ -24,6 +24,12 @@ Soniox's own descriptions are linked beside each slider: https://soniox.com/docs
 
 Level 3 with a 1 second cap splits sentences in half. That was tried and rejected.
 
+## Context
+
+One context text goes to every Soniox stream as `context.text`. The install asks for a default (`SONIOX_CONTEXT`). A sound desk can replace it in Settings, stored in that browser under `captioning.context`. A missing key means the install default; an empty string means no context. The desk sends `context` before `endpoint`, so the first stream already has it. A change reopens the streams, like the pause settings.
+
+The text can name people. It goes only to the sound desk `hello`, never `/status`, and the log records its length, not the text. Soniox rejects more than about 10,000 characters, so the page, server and install all cut it there.
+
 ## Spoken captions
 
 Off unless the venue answered yes at install (`SPOKEN=1`). Pace starts at 0.8 and may rise toward 2, by at most 0.05 per clip, only while that language is still playing earlier lines. It returns to 0.8 when the last listener turns sound off or the desk pauses.
@@ -39,7 +45,7 @@ A frontend-only fix does not get a protocol bump. Bumping only the page makes ev
 
 `backend/boot.mjs` and these environment variables must keep working for servers already installed:
 
-`PORT`, `SONIOX_API_KEY`, `SONIOX_REGION`, `SPEAKER_TOKEN`, `BILLING_ACCOUNT`, `AUTO_UPDATE`, `VENUE_NAME`, `SPOKEN`, `SETUP_VERSION`
+`PORT`, `SONIOX_API_KEY`, `SONIOX_REGION`, `SPEAKER_TOKEN`, `BILLING_ACCOUNT`, `AUTO_UPDATE`, `VENUE_NAME`, `SPOKEN`, `SETUP_VERSION`, `SONIOX_CONTEXT`
 
 `log.info` takes `Record<string, unknown>`. A typed object with no index signature does not count. Spread the fields. CI typechecks; a local test run does not.
 

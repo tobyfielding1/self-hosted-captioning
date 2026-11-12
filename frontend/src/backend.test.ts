@@ -15,7 +15,7 @@ function at(href: string) {
 describe("protocol version", () => {
   it("treats a whole number as major.0.0 and grades the gap", () => {
     expect(protocolNotice(4)).toBe("minor");
-    expect(protocolNotice(4, "4.2.0")).toBeNull();
+    expect(protocolNotice(4, "4.2.0")).toBe("minor");
     expect(protocolNotice(4, "4.1.0")).toBe("minor");
     expect(protocolNotice(4, "4.0.9")).toBe("minor");
     expect(protocolNotice(4, "4.1.0", "4.1.1")).toBe("patch");
@@ -31,7 +31,7 @@ describe("setup version", () => {
   it("treats a missing install as 1.0.0 and keeps the stronger notice", () => {
     expect(setupNotice(undefined)).toBe("minor");
     expect(setupNotice("1.0.0")).toBe("minor");
-    expect(setupNotice("1.1.0")).toBeNull();
+    expect(setupNotice("1.1.0")).toBe("minor");
     expect(setupNotice("1.2.0")).toBeNull();
     expect(setupNotice("nope")).toBe("minor");
     expect(setupNotice("1.1.0", "1.1.1")).toBe("patch");

@@ -442,9 +442,20 @@ background() {
   local attempt=0
   while :; do
     # No Dockerfile: Cloud Run builds with its Node 24 image and patches that image later.
-    local drop=()
+    local drop=() removals=()
     # An explicit "no" removes the flag. Leaving it out of the update would keep the old value.
-    if [ "${REMOVE_SPOKEN:-}" = "1" ]; then drop=(--remove-env-vars=SPOKEN); fi
+    if [ "${REMOVE_SPOKEN:-}" = "1" ]; then removals+=(SPOKEN); fi
+    if [ "${REMOVE_CONTEXT:-}" = "1" ]; then removals+=(SONIOX_CONTEXT); fi
+    if [ "${#removals[@]}" -gt 0 ]; then drop=("--remove-env-vars=$(IFS=,; echo "${removals[*]}")"); fi
+    # The context is free text, so the separator between variables is one character it does not contain.
+    local context="${SONIOX_CONTEXT:-}" d="" c
+    for c in @ '|' '~' '#' '%' ';'; do
+      case "$context" in *"$c"*) ;; *) d="$c"; break ;; esac
+    done
+    if [ -z "$d" ]; then d="@"; context="${context//@/ }"; fi
+    local vars="SPEAKER_TOKEN=${TOKEN}${d}BILLING_ACCOUNT=${BILLING}${d}VENUE_NAME=${DISPLAY}${d}SETUP_VERSION=${setup_version}"
+    if [ -n "${SPOKEN:-}" ]; then vars+="${d}SPOKEN=1"; fi
+    if [ -n "$context" ]; then vars+="${d}SONIOX_CONTEXT=${context}"; fi
     if gcloud run deploy "$SERVICE" \
       --source backend \
       --base-image nodejs24 \
@@ -457,7 +468,7 @@ background() {
       --service-account="$run_sa" \
       --build-service-account="projects/${PROJECT}/serviceAccounts/${build_sa}" \
       "${drop[@]}" \
-      --update-env-vars="^@^SPEAKER_TOKEN=${TOKEN}@BILLING_ACCOUNT=${BILLING}@VENUE_NAME=${DISPLAY}@SETUP_VERSION=${setup_version}${SPOKEN:+@SPOKEN=1}" \
+      --update-env-vars="^${d}^${vars}" \
       --quiet >"$WORK/deploy.out" 2>&1; then
       cat "$WORK/deploy.out"
       break
@@ -588,6 +599,32 @@ PY
   }
   explain_spoken
 fi
+
+# Context for Soniox: the default text for every sound desk. A desk can replace it in its own Settings.
+SONIOX_CONTEXT="$(env_value SONIOX_CONTEXT)"
+REMOVE_CONTEXT=""
+bold "What is usually captioned here? (optional)"
+note "A sentence or two helps the captions spell names and special words: the kind of event,"
+note "and the people, places and terms that come up. For example:"
+note "Sunday services at St Mary's. Reverend Okonkwo-Hale, Psalms, Eucharist."
+note "Each sound desk can change this later under Settings."
+if [ -n "$SONIOX_CONTEXT" ]; then
+  note "Current text: ${SONIOX_CONTEXT}"
+  note "Press Enter to keep it, type new text to replace it, or type none to remove it."
+else
+  note "Press Enter to skip."
+fi
+read -rp "   Context: " answer
+answer="${answer#"${answer%%[![:space:]]*}"}"
+answer="${answer%"${answer##*[![:space:]]}"}"
+case "$answer" in
+  "") ;;
+  none|NONE|None)
+    if [ -n "$SONIOX_CONTEXT" ]; then REMOVE_CONTEXT=1; fi
+    SONIOX_CONTEXT=""
+    ;;
+  *) SONIOX_CONTEXT="${answer:0:10000}" ;;
+esac
 background >>"$LOG" 2>&1 &
 BG_PID=$!
 

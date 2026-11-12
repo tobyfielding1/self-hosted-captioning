@@ -1,10 +1,10 @@
 export const ORIGINAL = "original";
 /** Keep these in step with PROTOCOL_VERSION and SETUP_VERSION in the backend. */
-export const PROTOCOL_VERSION = "4.2.0";
+export const PROTOCOL_VERSION = "4.3.0";
 /** Installs that have never recorded a setup version. */
 export const SETUP_BASELINE = "1.0.0";
-/** The install a venue needs. This one asks about spoken captions. */
-export const SETUP_VERSION = "1.1.0";
+/** The install a venue needs. This one asks about spoken captions and the context for Soniox. */
+export const SETUP_VERSION = "1.2.0";
 
 export interface ProtocolVersion {
   major: number;

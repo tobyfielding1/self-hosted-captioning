@@ -14,6 +14,8 @@ Click the **copy** button on the box below (it pastes into the terminal at the b
 
 The terminal lists any venues already on this account. Pick one to use it again, or the last line to set up another. A new one asks what to call it. Press Enter to keep the name Live captions, then which billing account to use.
 
+It also asks what is usually captioned here, such as the kind of event and names that come up, so the captions spell them right. Press Enter to skip. Each sound desk can change it later under Settings.
+
 Google Cloud then sets itself up, which takes a few minutes. You don't need to wait: get your Soniox key while it works.
 
 1. Open [console.soniox.com](https://console.soniox.com) and sign up, or sign in.

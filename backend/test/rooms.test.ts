@@ -703,3 +703,87 @@ describe("google fallback", () => {
     expect(history.lines).toContain("Hello there.");
   });
 });
+
+describe("context", () => {
+  const INSTALL = "Sunday service at St Mary's. Reverend Okonkwo-Hale.";
+
+  const restartWithDefault = async (text: string) => {
+    await app.stop();
+    process.env.SONIOX_CONTEXT = text;
+    try {
+      app = await start({ port: 0, timing: TIMING });
+    } finally {
+      delete process.env.SONIOX_CONTEXT;
+    }
+    await until(() => app.catalog.model !== null);
+  };
+
+  const streamWith = async (s: Client, count: number) => {
+    s.ws.send(FRAME);
+    await until(() => soniox.sessions.length === count && soniox.sessions[count - 1].config !== null);
+    return soniox.sessions[count - 1].config;
+  };
+
+  it("sends the install default to Soniox and to the sound desk, but not to /status", async () => {
+    await restartWithDefault(`  ${INSTALL}  `);
+    const s = await speaker();
+    await s.opened();
+    const hello = await s.waitFor((m) => m.type === "hello");
+    expect(hello.contextDefault).toBe(INSTALL);
+    expect(hello.context).toBeNull();
+    const a = listener("original");
+    await a.opened();
+    expect((await streamWith(s, 1)).context).toEqual({ text: INSTALL });
+    const status = await fetch(`http://127.0.0.1:${app.port}/status`).then((r) => r.text());
+    expect(status).not.toContain("Okonkwo");
+  });
+
+  it("sends no context when there is no default", async () => {
+    const s = await speaker();
+    await s.opened();
+    expect((await s.waitFor((m) => m.type === "hello")).contextDefault).toBe("");
+    const a = listener("original");
+    await a.opened();
+    expect((await streamWith(s, 1)).context).toBeUndefined();
+  });
+
+  it("uses the sound desk's text, reopens streams when it changes, and goes back to the default", async () => {
+    await restartWithDefault(INSTALL);
+    const s = await speaker("secret", false);
+    await s.opened();
+    s.ws.send(JSON.stringify({ type: "context", text: "Physics lecture. Professor Ngata." }));
+    s.ws.send(JSON.stringify({ type: "endpoint", ...DESK_ENDPOINT }));
+    const a = listener("original");
+    await a.opened();
+    expect((await streamWith(s, 1)).context).toEqual({ text: "Physics lecture. Professor Ngata." });
+
+    s.ws.send(JSON.stringify({ type: "context", text: null }));
+    await until(() => soniox.open().length === 0);
+    expect((await streamWith(s, 2)).context).toEqual({ text: INSTALL });
+
+    s.ws.send(JSON.stringify({ type: "context", text: "" }));
+    await until(() => soniox.open().length === 0);
+    expect((await streamWith(s, 3)).context).toBeUndefined();
+  });
+
+  it("keeps the stream open when the text does not change", async () => {
+    await restartWithDefault(INSTALL);
+    const s = await speaker();
+    await s.opened();
+    const a = listener("original");
+    await a.opened();
+    await streamWith(s, 1);
+    s.ws.send(JSON.stringify({ type: "context", text: INSTALL }));
+    await sleep(100);
+    expect(soniox.open()).toHaveLength(1);
+  });
+
+  it("cuts text Soniox would refuse", async () => {
+    const s = await speaker();
+    await s.opened();
+    s.ws.send(JSON.stringify({ type: "context", text: "x".repeat(12_000) }));
+    const a = listener("original");
+    await a.opened();
+    expect((await streamWith(s, 1)).context.text).toHaveLength(10_000);
+  });
+});

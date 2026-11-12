@@ -56,6 +56,16 @@ export interface HubOptions {
   speaker?: ((text: string, voice: ChirpVoice, speakingRate: number) => Promise<Buffer>) | null;
   timing?: Partial<Timing>;
   info?: () => Record<string, unknown>;
+  /** Context text from the install. The sound desk may replace it. */
+  defaultContext?: string;
+}
+
+/** Soniox rejects a context over about 10,000 characters. */
+export const MAX_CONTEXT = 10_000;
+
+export function parseContext(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  return raw.trim().slice(0, MAX_CONTEXT);
 }
 
 const base = (code?: string) => (code ?? "").toLowerCase().split(/[-_]/)[0];
@@ -192,6 +202,8 @@ export class Hub {
   private timing: Timing;
   /** Unset until the sound desk sends pause settings. */
   private endpoint: EndpointSettings | null = null;
+  /** Context from the sound desk. Null uses the install default. */
+  private context: string | null = null;
 
   constructor(private opts: HubOptions) {
     this.timing = { ...DEFAULT_TIMING, ...opts.timing };
@@ -205,6 +217,14 @@ export class Hub {
   /** Current pause settings, or null until the sound desk has sent them. */
   endpointSettings(): EndpointSettings | null {
     return this.endpoint ? { ...this.endpoint } : null;
+  }
+
+  private defaultContext(): string {
+    return parseContext(this.opts.defaultContext ?? "") ?? "";
+  }
+
+  private activeContext(): string {
+    return this.context ?? this.defaultContext();
   }
 
   close() {
@@ -234,13 +254,20 @@ export class Hub {
     });
     ws.on("close", () => this.onSpeakerClose(ws));
 
-    send(ws, { type: "hello", paused: this.paused, errors: this.errors, ...this.opts.info?.() });
+    send(ws, {
+      type: "hello",
+      paused: this.paused,
+      errors: this.errors,
+      ...this.opts.info?.(),
+      contextDefault: this.defaultContext(),
+      context: this.context,
+    });
     if (this.opts.catalog.error) send(ws, { type: "error", message: this.opts.catalog.error });
     this.sendStats();
   }
 
   private onSpeakerMessage(text: string) {
-    let msg: { type?: string; paused?: boolean };
+    let msg: { type?: string; paused?: boolean; text?: unknown };
     try {
       msg = JSON.parse(text);
     } catch {
@@ -254,6 +281,25 @@ export class Hub {
     } else if (msg.type === "endpoint") {
       const next = parseEndpoint(msg);
       if (next) this.setEndpoint(next);
+    } else if (msg.type === "context") {
+      this.setContext(parseContext(msg.text));
+    }
+  }
+
+  private setContext(next: string | null) {
+    const before = this.activeContext();
+    this.context = next;
+    const after = this.activeContext();
+    if (after === before) return;
+    log.info("context settings", { chars: after.length, fromDesk: next !== null });
+    this.restartStreams("context settings");
+  }
+
+  private restartStreams(why: string) {
+    for (const [key, stream] of this.streams) {
+      stream.finish();
+      this.streams.delete(key);
+      log.info("stream closed", { lang: key, why });
     }
   }
 
@@ -272,11 +318,7 @@ export class Hub {
       endpointSensitivity: next.endpointSensitivity,
       endpointLatency: next.endpointLatency,
     });
-    for (const [key, stream] of this.streams) {
-      stream.finish();
-      this.streams.delete(key);
-      log.info("stream closed", { lang: key, why: "endpoint settings" });
-    }
+    this.restartStreams("endpoint settings");
     send(this.speaker, { type: "endpoint", ...this.endpoint });
   }
 
@@ -441,6 +483,7 @@ export class Hub {
       targetLanguage: key === ORIGINAL ? undefined : key,
       endpointDetection: true,
       ...this.endpoint,
+      context: this.activeContext(),
     });
     this.streams.set(key, stream);
     log.info("stream opened", { lang: key });

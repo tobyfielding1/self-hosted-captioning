@@ -121,6 +121,8 @@ export interface StreamConfig {
   endpointLatency?: number;
   /** When false, Soniox is not asked to detect pauses. */
   endpointDetection?: boolean;
+  /** Background text for the venue. Empty sends no context. */
+  context?: string;
 }
 
 /**
@@ -155,6 +157,7 @@ export class SonioxStream extends EventEmitter {
                 max_endpoint_delay_ms: config.endpointDelayMs ?? 2000,
               }
             : {}),
+          ...(config.context ? { context: { text: config.context } } : {}),
           ...(config.targetLanguage
             ? { translation: { type: "one_way", target_language: config.targetLanguage } }
             : {}),

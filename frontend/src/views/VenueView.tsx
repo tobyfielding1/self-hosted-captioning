@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { audioSupported, guessMode, listInputs, startCapture, type Capture, type InputMode } from "../audio/capture";
 import { clampSendAfter, SEND_AFTER } from "../audio/gate";
-import { checkDeskAccess, getBackend, getStatus, getToken, listenerLink, protocolNotice, setupNotice, siteRoot, speakLink, strongestNotice, type DeskAccess, type ProtocolNotice, type Status } from "../backend";
+import { checkDeskAccess, getBackend, getStatus, getToken, listenerLink, parseProtocol, protocolNotice, setupNotice, siteRoot, speakLink, strongestNotice, type DeskAccess, type ProtocolNotice, type Status } from "../backend";
 import { englishName } from "../lib/languages";
 import { useWakeLock, wakeLockSupported } from "../lib/wakeLock";
 import { createDeskGate } from "../audio/speech-model";
@@ -93,11 +93,22 @@ const STORE = {
   endpointDelayMs: "captioning.endpointDelayMs",
   endpointSensitivity: "captioning.endpointSensitivity",
   endpointLatency: "captioning.endpointLatency",
+  /** Missing means the install default. An empty string means no context. */
+  context: "captioning.context",
 };
 
 /** The only copy of these defaults. Changing them ships with the page. */
 const ENDPOINT_DEFAULTS = { delayMs: 1500, sensitivity: 0.3, latency: 2 };
 const SONIOX_ENDPOINT_DOCS = "https://soniox.com/docs/stt/rt/endpoint-detection";
+const SONIOX_CONTEXT_DOCS = "https://soniox.com/docs/stt/concepts/context";
+/** Soniox rejects a context over about 10,000 characters. */
+const MAX_CONTEXT = 10_000;
+
+/** Servers from 4.3.0 accept context from the sound desk. */
+function acceptsContext(protocolVersion: unknown): boolean {
+  const v = parseProtocol(protocolVersion);
+  return !!v && (v.major > 4 || (v.major === 4 && v.minor >= 3));
+}
 
 function SonioxInfo({ href, text }: { href: string; text: string }) {
   return (
@@ -168,6 +179,8 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
     return saved === null ? SEND_AFTER.default : clampSendAfter(Number(saved));
   });
   const [endpoint, setEndpoint] = useState(readEndpoint);
+  const [context, setContext] = useState<string | null>(() => localStorage.getItem(STORE.context));
+  const [contextDraft, setContextDraft] = useState<string | null>(null);
   const [conn, setConn] = useState<ConnState>("off");
   const [stats, setStats] = useState<Stats | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -185,23 +198,34 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
   const connRef = useRef<SpeakerConnection | null>(null);
   const endpointRef = useRef(endpoint);
   endpointRef.current = endpoint;
+  const contextRef = useRef(context);
+  contextRef.current = context;
 
   const live = conn !== "off";
   const wakeLock = useWakeLock(live);
+  const contextDefault = typeof hello?.contextDefault === "string" ? hello.contextDefault : null;
+  const contextText = context ?? contextDefault ?? "";
+  // An older server sends no contextDefault. Before the desk connects, only /status says what it runs.
+  const contextShown = hello ? contextDefault !== null : acceptsContext(status?.protocolVersion);
 
-  const pushEndpoint = useCallback((next: { delayMs: number; sensitivity: number; latency: number }) => {
-    connRef.current?.sendControl({
-      type: "endpoint",
-      endpointDelayMs: next.delayMs,
-      endpointSensitivity: next.sensitivity,
-      endpointLatency: next.latency,
-    });
-  }, []);
+  // Context goes first: the server opens no stream until the endpoint settings arrive.
+  const pushSettings = useCallback(
+    (next: { delayMs: number; sensitivity: number; latency: number }, text: string | null) => {
+      connRef.current?.sendControl({ type: "context", text });
+      connRef.current?.sendControl({
+        type: "endpoint",
+        endpointDelayMs: next.delayMs,
+        endpointSensitivity: next.sensitivity,
+        endpointLatency: next.latency,
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (conn !== "live") return;
-    pushEndpoint(endpoint);
-  }, [conn, endpoint, pushEndpoint]);
+    pushSettings(endpoint, context);
+  }, [conn, endpoint, context, pushSettings]);
 
   useEffect(() => {
     let gone = false;
@@ -257,7 +281,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
     connRef.current = new SpeakerConnection(
       (s) => {
         setConn(s);
-        if (s === "live") pushEndpoint(endpointRef.current);
+        if (s === "live") pushSettings(endpointRef.current, contextRef.current);
       },
       (msg: ServerMessage) => {
         if (msg.type === "hello") setHello(msg);
@@ -726,6 +750,55 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
             Reset pause settings
           </Button>
         </div>
+        {contextShown && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-1.5">
+              <label className="font-semibold" htmlFor="context">
+                Context (Soniox)
+              </label>
+              <SonioxInfo
+                href={SONIOX_CONTEXT_DOCS}
+                text="Tells Soniox what to expect: the kind of event, and the names and special words that come up."
+              />
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              The kind of event, and the names of people, places and special words that come up. Applies on the next
+              stream while this desk is live. Stored in this browser.
+              {context === null ? " Using the text from the install." : ""}
+            </p>
+            <textarea
+              id="context"
+              className="w-full rounded border border-gray-300 bg-white p-2 dark:border-gray-600 dark:bg-gray-800"
+              rows={4}
+              maxLength={MAX_CONTEXT}
+              value={contextDraft ?? contextText}
+              onChange={(e) => setContextDraft(e.target.value)}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={contextDraft === null || contextDraft.trim() === contextText}
+                onClick={() => {
+                  const text = (contextDraft ?? "").trim().slice(0, MAX_CONTEXT);
+                  setContext(text);
+                  setContextDraft(null);
+                  localStorage.setItem(STORE.context, text);
+                }}
+              >
+                Save context
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setContext(null);
+                  setContextDraft(null);
+                  localStorage.removeItem(STORE.context);
+                }}
+              >
+                Reset to install default
+              </Button>
+            </div>
+          </div>
+        )}
         <p className="text-sm text-gray-600 dark:text-gray-300 break-all">
           Server: {backend}
           {status && ` (version ${status.version})`}
