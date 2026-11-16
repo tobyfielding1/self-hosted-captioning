@@ -2,6 +2,10 @@
 #   main push            → backend-dev    + site at …/self-hosted-captioning/dev/
 #   v* tag / manual prod → backend-latest + site at …/self-hosted-captioning/
 # Pages is one artifact with both trees, so publishing one side keeps the other.
+#
+# GitHub Pages dedupes deployments by GITHUB_SHA. Tagging the same commit that just
+# updated /dev/ must still replace the live site, so the deploy step overrides
+# GITHUB_SHA with channel + run id (see actions/deploy-pages#383).
 name: Release
 
 on:
@@ -209,7 +213,7 @@ jobs:
           path: site
 
   pages:
-    needs: publish
+    needs: [check, publish]
     if: needs.publish.outputs.pages == '1'
     runs-on: ubuntu-latest
     permissions:
@@ -230,3 +234,6 @@ jobs:
 
       - id: deploy
         uses: actions/deploy-pages@v5
+        env:
+          # Unique per channel and run so main→dev then v* on the same commit both publish.
+          GITHUB_SHA: ${{ format('{0}-{1}-{2}', needs.check.outputs.sha, needs.check.outputs.channel, github.run_id) }}
