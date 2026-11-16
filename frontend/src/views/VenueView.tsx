@@ -1247,11 +1247,14 @@ function CostCard() {
     <Card title="Cost">
       <p>
         You pay the providers directly, only while the sound desk is live and someone is reading. Each language costs
-        the same however many people read it. Cloud Run CPU and memory for these examples stay inside Google's free
-        allowance; egress is charged for audio leaving the server.
+        the same however many people read it. The figures below are worked examples for three different months of use,
+        not a quote for your venue. Cloud Run CPU and memory for these stay inside Google's free allowance; egress is
+        charged for audio leaving the server.
       </p>
       <div className="space-y-1">
-        <p className="font-semibold">6 hours a month, translated into 1 language by Soniox: about US{usd(small)} a month</p>
+        <p className="font-semibold">
+          Example: 6 hours a month, translated into 1 language by Soniox — about US{usd(small)} a month
+        </p>
         <p className="text-sm text-gray-600 dark:text-gray-300">
           Soniox: 6 hours at about {usd(p.sonioxTranslatedHour)} an hour = {usd(smallHours * p.sonioxTranslatedHour)}.
           Cloud Run egress: one stream of 16 kHz audio to Soniox, about {giBs(smallEgressGiB)} GiB at{" "}
@@ -1260,8 +1263,8 @@ function CostCard() {
       </div>
       <div className="space-y-1">
         <p className="font-semibold">
-          18 hours a month, 3 Soniox languages, 1 Google Translate language and spoken captions in 1 language: about
-          US{usd(mid)} a month
+          Example: 18 hours a month, 3 Soniox languages, 1 Google Translate language and spoken captions in 1
+          language — about US{usd(mid)} a month
         </p>
         <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-gray-300 space-y-1">
           <li>
@@ -1285,8 +1288,8 @@ function CostCard() {
       </div>
       <div className="space-y-1">
         <p className="font-semibold">
-          30 hours a month, 5 Soniox languages, 2 Google Translate languages and spoken captions in 2 languages: about
-          US{usd(large)} a month
+          Example: 30 hours a month, 5 Soniox languages, 2 Google Translate languages and spoken captions in 2
+          languages — about US{usd(large)} a month
         </p>
         <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-gray-300 space-y-1">
           <li>
@@ -1310,8 +1313,8 @@ function CostCard() {
         </ul>
       </div>
       <p className="text-sm text-gray-600 dark:text-gray-300">
-        In US dollars. These assume 30 hours of speech is about 1 million characters. Soniox's translated hour is
-        estimated from its token prices. Quiet audio isn't sent, so real egress is often lower.{" "}
+        In US dollars. The examples assume 30 hours of speech is about 1 million characters. Soniox's translated hour
+        is estimated from its token prices. Quiet audio isn't sent, so real egress is often lower.{" "}
         {live
           ? `Google Translate and Chirp prices were read from Google today by the demo server; Soniox and Cloud Run egress are from ${PRICES_AS_OF}.`
           : `Prices as of ${PRICES_AS_OF}, and they change.`}{" "}
