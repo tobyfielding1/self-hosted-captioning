@@ -234,43 +234,48 @@ jobs:
         with:
           path: site
 
-      # Not actions/deploy-pages: that always sets pages_build_version to GITHUB_SHA, which
-      # the runner pins, so a tag on the same commit as /dev/ would not replace the site.
+      # Not actions/deploy-pages: it always uses GITHUB_SHA as pages_build_version (and the
+      # runner will not let a step override GITHUB_SHA), so main→dev then a v* tag on that
+      # commit keeps the first artifact. Create the deployment ourselves with a unique build
+      # version (artifact id). OIDC via core.getIDToken(), same as deploy-pages.
       - id: deploy
+        uses: actions/github-script@v8
         env:
-          GH_TOKEN: ${{ github.token }}
           ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
-        run: |
-          set -euo pipefail
-          : "${ARTIFACT_ID:?upload-pages-artifact did not return artifact_id}"
-          : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?}"
-          : "${ACTIONS_ID_TOKEN_REQUEST_URL:?}"
-          # Same as actions/deploy-pages: core.getIDToken() with no audience.
-          ID_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}" | jq -r .value)"
-          # Artifact id is unique per upload (actions/deploy-pages#383 / #399).
-          BUILD_VERSION="${ARTIFACT_ID}"
-          echo "Deploying Pages artifact ${ARTIFACT_ID} as build ${BUILD_VERSION}"
-          RESP="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/pages/deployments" \
-            -F "artifact_id=${ARTIFACT_ID}" \
-            -f "pages_build_version=${BUILD_VERSION}" \
-            -f "oidc_token=${ID_TOKEN}")"
-          echo "$RESP" | jq '{id, status_url, page_url}'
-          ID="$(jq -r '.id // empty' <<<"$RESP")"
-          [ -n "$ID" ] || exit 1
-          PAGE_URL="$(jq -r '.page_url // empty' <<<"$RESP")"
-          echo "page_url=${PAGE_URL:-https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/}" >> "$GITHUB_OUTPUT"
-          for _ in $(seq 1 60); do
-            STATUS="$(gh api "repos/${GITHUB_REPOSITORY}/pages/deployments/${ID}" | jq -r .status)"
-            echo "Pages status: ${STATUS}"
-            case "$STATUS" in
-              succeed) echo "Reported success!"; exit 0 ;;
-              deployment_failed|deployment_content_failed|deployment_cancelled|deployment_lost)
-                echo "Pages deploy failed: ${STATUS}"
-                exit 1
-                ;;
-            esac
-            sleep 5
-          done
-          echo "Timed out waiting for Pages deploy ${ID}"
-          exit 1
+        with:
+          script: |
+            const artifactId = process.env.ARTIFACT_ID
+            if (!artifactId) throw new Error('upload-pages-artifact did not return artifact_id')
+            const oidc = await core.getIDToken()
+            const buildVersion = String(artifactId)
+            core.info(`Deploying Pages artifact ${artifactId} as build ${buildVersion}`)
+            const { data: created } = await github.request('POST /repos/{owner}/{repo}/pages/deployments', {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: Number(artifactId),
+              pages_build_version: buildVersion,
+              oidc_token: oidc,
+            })
+            const id = created.id
+            core.info(`Created deployment ${id}`)
+            core.setOutput('page_url', created.page_url || `https://${context.repo.owner}.github.io/${context.repo.repo}/`)
+            const deadline = Date.now() + 10 * 60 * 1000
+            let interval = 5000
+            while (Date.now() < deadline) {
+              await new Promise((r) => setTimeout(r, interval))
+              const { data } = await github.request('GET /repos/{owner}/{repo}/pages/deployments/{deploymentId}', {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                deploymentId: id,
+              })
+              core.info(`Pages status: ${data.status}`)
+              if (data.status === 'succeed') {
+                core.info('Reported success!')
+                return
+              }
+              if (['deployment_failed', 'deployment_content_failed', 'deployment_cancelled', 'deployment_lost'].includes(data.status)) {
+                throw new Error(`Pages deploy failed: ${data.status}`)
+              }
+              interval = Math.min(Math.round(interval * 1.5), 30000)
+            }
+            throw new Error(`Timed out waiting for Pages deploy ${id}`)
