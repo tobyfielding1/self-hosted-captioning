@@ -1,6 +1,6 @@
 export const ORIGINAL = "original";
 /** Keep these in step with PROTOCOL_VERSION and SETUP_VERSION in the backend. */
-export const PROTOCOL_VERSION = "4.4.0";
+export const PROTOCOL_VERSION = "4.5.0";
 /** Installs that have never recorded a setup version. */
 export const SETUP_BASELINE = "1.0.0";
 /** The install a venue needs. This one asks about Google Translate, spoken captions, the context for Soniox, and the session length. */
@@ -81,6 +81,11 @@ export interface Status {
   streaming?: boolean;
   /** Session length from the install, in minutes. A sound desk may replace it. Missing on a server that hasn't updated yet. */
   sessionMinutesDefault?: number;
+  /**
+   * Install context for Soniox. Only present when the request carries the desk token (it can name people).
+   * Missing on a public /status, or on a server that hasn't updated yet.
+   */
+  contextDefault?: string;
   version: string;
   /** Major protocol. Older servers send only this. */
   protocol: number;
@@ -202,10 +207,12 @@ export async function checkDeskAccess(backend = getBackend(), token = getToken()
   }
 }
 
-export async function getStatus(backend = getBackend()): Promise<Status | null> {
+export async function getStatus(backend = getBackend(), token = getToken()): Promise<Status | null> {
   if (!backend) return null;
   try {
-    const res = await fetch(`${backend}/status`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    const headers: HeadersInit = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${backend}/status`, { cache: "no-store", headers, signal: AbortSignal.timeout(15_000) });
     return res.ok ? ((await res.json()) as Status) : null;
   } catch {
     return null;

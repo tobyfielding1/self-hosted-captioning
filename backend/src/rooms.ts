@@ -240,8 +240,13 @@ export class Hub {
     return this.endpoint ? { ...this.endpoint } : null;
   }
 
-  private defaultContext(): string {
+  /** Install default for Soniox. Empty means none. For the sound desk only. */
+  contextDefault(): string {
     return parseContext(this.opts.defaultContext ?? "") ?? "";
+  }
+
+  private defaultContext(): string {
+    return this.contextDefault();
   }
 
   private activeContext(): string {

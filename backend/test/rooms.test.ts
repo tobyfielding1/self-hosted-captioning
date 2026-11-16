@@ -748,7 +748,7 @@ describe("context", () => {
     return soniox.sessions[count - 1].config;
   };
 
-  it("sends the install default to Soniox and to the sound desk, but not to /status", async () => {
+  it("sends the install default to Soniox and to the sound desk, and to /status only with the desk token", async () => {
     await restartWithDefault(`  ${INSTALL}  `);
     const s = await speaker();
     await s.opened();
@@ -758,8 +758,13 @@ describe("context", () => {
     const a = listener("original");
     await a.opened();
     expect((await streamWith(s, 1)).context).toEqual({ text: INSTALL });
-    const status = await fetch(`http://127.0.0.1:${app.port}/status`).then((r) => r.text());
-    expect(status).not.toContain("Okonkwo");
+    const publicStatus = await fetch(`http://127.0.0.1:${app.port}/status`).then((r) => r.text());
+    expect(publicStatus).not.toContain("Okonkwo");
+    expect(JSON.parse(publicStatus).contextDefault).toBeUndefined();
+    const deskStatus = await fetch(`http://127.0.0.1:${app.port}/status`, {
+      headers: { Authorization: "Bearer secret" },
+    }).then((r) => r.json());
+    expect(deskStatus.contextDefault).toBe(INSTALL);
   });
 
   it("sends no context when there is no default", async () => {

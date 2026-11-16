@@ -236,10 +236,16 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
   contextRef.current = context;
   const live = conn !== "off";
   const wakeLock = useWakeLock(live);
-  const contextDefault = typeof hello?.contextDefault === "string" ? hello.contextDefault : null;
+  // Same pattern as session length: hello when live, else /status with the desk token.
+  const contextDefault =
+    typeof hello?.contextDefault === "string"
+      ? hello.contextDefault
+      : typeof status?.contextDefault === "string"
+        ? status.contextDefault
+        : null;
   const contextText = context ?? contextDefault ?? "";
-  // An older server sends no contextDefault. Before the desk connects, only /status says what it runs.
-  const contextShown = hello ? contextDefault !== null : acceptsContext(status?.protocolVersion);
+  // An older server sends no contextDefault. Show the field once we know this build accepts context.
+  const contextShown = contextDefault !== null || acceptsContext(status?.protocolVersion) || acceptsContext(hello?.protocolVersion);
   // An older server sends no default and has no session limit.
   const sessionDefault =
     typeof hello?.sessionMinutesDefault === "number" ? hello.sessionMinutesDefault : (status?.sessionMinutesDefault ?? null);
@@ -811,7 +817,11 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
             <p className="text-sm text-gray-600 dark:text-gray-300">
               The kind of event, and the names of people, places and special words that come up. Applies on the next
               stream while this desk is live. Stored in this browser.
-              {context === null ? " Using the text from the install." : ""}
+              {context === null && contextDefault !== null
+                ? contextDefault
+                  ? " Using the text from the install (shown below)."
+                  : " No text was set at install; leave empty for none."
+                : ""}
             </p>
             <textarea
               id="context"

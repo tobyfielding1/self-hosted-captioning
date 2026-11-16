@@ -28,7 +28,7 @@ Level 3 with a 1 second cap splits sentences in half. That was tried and rejecte
 
 One context text goes to every Soniox stream as `context.text`. The install asks for a default (`SONIOX_CONTEXT`). A sound desk can replace it in Settings, stored in that browser under `captioning.context`. A missing key means the install default; an empty string means no context. The desk sends `context` before `endpoint`, so the first stream already has it. A change reopens the streams, like the pause settings.
 
-The text can name people. It goes only to the sound desk `hello`, never `/status`, and the log records its length, not the text. Soniox rejects more than about 10,000 characters, so the page, server and install all cut it there.
+The text can name people. It goes to the sound desk `hello`, and to `/status` only when the request carries the desk token (so Settings can show the install default before Start, like the session length). A public `/status` must not include it. The log records its length, not the text. Soniox rejects more than about 10,000 characters, so the page, server and install all cut it there.
 
 ## Google Translate
 
