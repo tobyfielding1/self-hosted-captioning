@@ -420,8 +420,8 @@ export default function ListenView() {
               }}
               className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${
                 audio
-                  ? "border-purple bg-purple text-white"
-                  : "border-purple/30 hover:bg-veil dark:border-white/20 dark:hover:bg-white/10"
+                  ? "border-gray-400 bg-purple text-white dark:border-white/40"
+                  : "border-purple/30 hover:bg-veil dark:border-white/40 dark:hover:bg-white/10"
               }`}
             >
               <SpeakerIcon on={audio} />
@@ -435,8 +435,8 @@ export default function ListenView() {
               onClick={() => setWithOriginal((v) => !v)}
               className={`h-11 w-[calc(5.5rem+0.5rem)] shrink-0 rounded-lg border text-base font-semibold ${
                 withOriginal
-                  ? "border-purple bg-purple text-white"
-                  : "border-purple/30 hover:bg-veil dark:border-white/20 dark:hover:bg-white/10"
+                  ? "border-gray-400 bg-purple text-white dark:border-white/40"
+                  : "border-purple/30 hover:bg-veil dark:border-white/40 dark:hover:bg-white/10"
               }`}
             >
               Original
@@ -465,7 +465,7 @@ export default function ListenView() {
       {!follow && (
         <button
           onClick={() => setFollow(true)}
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-purple text-white px-5 py-2 text-lg shadow-lg"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-purple text-white px-5 py-2 text-lg shadow-lg border-2 border-gray-400 dark:border-white/40"
         >
           Jump to live
         </button>

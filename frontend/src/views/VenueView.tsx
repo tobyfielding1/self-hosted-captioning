@@ -1035,7 +1035,7 @@ function Intro() {
           href={INSTALL_URL}
           target="_blank"
           rel="noreferrer"
-          className="inline-block bg-purple hover:bg-midnight text-white text-lg font-semibold px-8 py-5 rounded-2xl"
+          className="inline-block bg-purple hover:bg-midnight text-white text-lg font-semibold px-8 py-5 rounded-2xl border-2 border-gray-400 dark:border-white/40"
         >
           Set up live captions
         </a>
@@ -1670,7 +1670,7 @@ function Delete({ status }: { status: Status | null | undefined }) {
         href={DELETE_URL}
         target="_blank"
         rel="noreferrer"
-        className="inline-block bg-red-700 hover:bg-red-800 text-white font-semibold px-4 py-2.5 rounded-xl"
+        className="inline-block bg-red-700 hover:bg-red-800 text-white font-semibold px-4 py-2.5 rounded-xl border-2 border-gray-400 dark:border-white/40"
       >
         Delete from Google Cloud
       </a>
