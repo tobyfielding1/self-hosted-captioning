@@ -1,9 +1,15 @@
 import * as gcp from "./gcp.js";
 import * as log from "./log.js";
+import { readGooglePrices, readSonioxSpend, type GooglePrices, type SonioxSpend } from "./prices.js";
 import { detectRegion, fastestRegion, regionLabel, SonioxHttpError, type SonioxModel } from "./soniox.js";
 
 const REFRESH_MS = 24 * 60 * 60 * 1000;
-const RETRY_MS = 60 * 1000;
+/** After a failure the catalog retries soon, then less often: 10 s, 20 s, 40 s, up to 2 minutes. */
+const RETRY_FIRST_MS = 10 * 1000;
+const RETRY_MAX_MS = 2 * 60 * 1000;
+
+/** Google Translate on this server: turned off (or not on Google Cloud), still loading (or retrying), or listed. */
+export type GoogleState = "off" | "loading" | "ready";
 
 const ROOT_ALIAS: Record<string, string> = { cmn: "zh", fil: "tl", nb: "no", nn: "no", iw: "he", jw: "jv" };
 
@@ -87,6 +93,10 @@ export class Catalog {
   googleTargets = new Set<string>();
   /** English names from Google, for languages browsers can't name themselves. */
   googleNames = new Map<string, string>();
+  /** A failed refresh leaves this "loading" until a list arrives. A later failure keeps the list it has. */
+  google: GoogleState = gcp.translateEnabled() ? "loading" : "off";
+  private failures = 0;
+  prices: GooglePrices | null = null;
   chirpVoices: ChirpVoice[] = [];
   error: string | null = null;
   private timer?: NodeJS.Timeout;
@@ -128,8 +138,11 @@ export class Catalog {
     // Google is often not ready for a few minutes after install (API just enabled, permissions
     // propagating), so a failure on either side retries soon rather than waiting a day.
     const results = await Promise.allSettled([this.refreshSoniox(), this.refreshGoogle(), this.refreshVoices()]);
+    void this.refreshPrices();
     const ok = results.every((r) => r.status === "fulfilled");
-    this.timer = setTimeout(() => void this.refresh(), ok ? REFRESH_MS : RETRY_MS);
+    this.failures = ok ? 0 : this.failures + 1;
+    const delay = ok ? REFRESH_MS : Math.min(RETRY_FIRST_MS * 2 ** (this.failures - 1), RETRY_MAX_MS);
+    this.timer = setTimeout(() => void this.refresh(), delay);
     this.timer.unref();
   }
 
@@ -160,6 +173,7 @@ export class Catalog {
   }
 
   private async refreshGoogle() {
+    if (this.google === "off") return;
     const project = await gcp.projectId();
     const token = await gcp.accessToken();
     if (!project || !token) {
@@ -177,11 +191,38 @@ export class Catalog {
       const targets = body.languages.filter((l) => l.supportTarget);
       this.googleTargets = new Set(targets.map((l) => l.languageCode));
       this.googleNames = new Map(targets.filter((l) => l.displayName).map((l) => [l.languageCode, l.displayName!]));
+      this.google = "ready";
       log.info("google catalog", { targets: this.googleTargets.size });
     } catch (e) {
       log.warn("google catalog failed", { err: String(e) });
       throw e;
     }
+  }
+
+  /**
+   * For the home page's cost examples. Best effort: a failure keeps the last prices. Read at most once a day,
+   * so the catalog's quick retries during warm-up don't repeat it.
+   */
+  private async refreshPrices() {
+    const fresh = (readAt?: string) => !!readAt && Date.now() - Date.parse(readAt) < REFRESH_MS - 60 * 60 * 1000;
+    if (!gcp.onGoogleCloud() || fresh(this.prices?.readAt)) return;
+    try {
+      this.prices = await readGooglePrices();
+      log.info("google prices", { translatePerMillion: this.prices.translatePerMillion, speechPerMillion: this.prices.speechPerMillion });
+    } catch (e) {
+      log.warn("google prices failed", { err: String(e) });
+    }
+  }
+
+  private spend: { at: number; value: SonioxSpend } | null = null;
+
+  /** This month's and last month's Soniox spend, for the sound desk. Kept for 10 minutes. */
+  async sonioxSpend(): Promise<SonioxSpend> {
+    if (this.spend && Date.now() - this.spend.at < 10 * 60_000) return this.spend.value;
+    if (this.sonioxRegion === null) throw new Error("Soniox isn't connected yet");
+    const value = await readSonioxSpend(this.key, this.sonioxRegion);
+    this.spend = { at: Date.now(), value };
+    return value;
   }
 
   /** Chirp 3 HD voice for this audience language, or null when Chirp has none. */
@@ -235,6 +276,7 @@ export class Catalog {
     const spoken = this.voiceIndex();
     return {
       speech: this.speech,
+      google: this.google,
       targets: targets.map((t) => (spoken.has(languageRoot(t.code)) ? { ...t, audio: true as const } : t)),
     };
   }

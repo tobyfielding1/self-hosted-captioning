@@ -1,8 +1,9 @@
 import http from "node:http";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import WebSocket, { WebSocketServer } from "ws";
-import { pickChirpVoice } from "../src/catalog.js";
-import { speakingRate } from "../src/rooms.js";
+import { Catalog, pickChirpVoice } from "../src/catalog.js";
+import { skuPrice, spendByMonth } from "../src/prices.js";
+import { parseSessionMinutes, speakingRate } from "../src/rooms.js";
 import { start, type Running } from "../src/server.js";
 
 /** A fake Soniox: /v1/models over HTTP plus a real-time WebSocket that echoes a caption per audio frame. */
@@ -216,6 +217,29 @@ describe("catalog", () => {
       { code: "es", via: "soniox" },
       { code: "haw", via: "google" },
     ]);
+  });
+
+  it("tells the page whether Google is off, still loading, or listed", async () => {
+    const saved = { service: process.env.K_SERVICE, project: process.env.GOOGLE_CLOUD_PROJECT };
+    delete process.env.K_SERVICE;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    try {
+      expect(new Catalog("good-key").languages().google).toBe("off");
+      process.env.K_SERVICE = "captioning";
+      const onCloudRun = new Catalog("good-key");
+      expect(onCloudRun.languages().google).toBe("loading");
+      // No metadata server here, so the project and token are missing: a failure, not an empty success.
+      await onCloudRun.refresh();
+      expect(onCloudRun.languages().google).toBe("loading");
+      onCloudRun.stop();
+      process.env.GOOGLE_TRANSLATE = "0";
+      expect(new Catalog("good-key").languages().google).toBe("off");
+    } finally {
+      delete process.env.GOOGLE_TRANSLATE;
+      if (saved.service === undefined) delete process.env.K_SERVICE;
+      else process.env.K_SERVICE = saved.service;
+      if (saved.project !== undefined) process.env.GOOGLE_CLOUD_PROJECT = saved.project;
+    }
   });
 
   it("adds Google languages and regional variants Soniox lacks, each once", () => {
@@ -785,5 +809,139 @@ describe("context", () => {
     const a = listener("original");
     await a.opened();
     expect((await streamWith(s, 1)).context.text).toHaveLength(10_000);
+  });
+});
+
+describe("prices", () => {
+  it("takes the newest price of the first paid tier, and the characters free before it", () => {
+    const skus = [
+      { description: "Neural Translation Model Predictions" },
+      {
+        description: "Chirp3-HD voice characters",
+        pricingInfo: [
+          { effectiveTime: "2024-01-01T00:00:00Z", pricingExpression: { tieredRates: [{ startUsageAmount: 0, unitPrice: { units: "0", nanos: 16_000 } }] } },
+          {
+            effectiveTime: "2026-06-01T00:00:00Z",
+            pricingExpression: {
+              tieredRates: [
+                { startUsageAmount: 0, unitPrice: { units: "0", nanos: 0 } },
+                { startUsageAmount: 1_000_000, unitPrice: { units: "0", nanos: 30_000 } },
+              ],
+            },
+          },
+        ],
+      },
+    ];
+    expect(skuPrice(skus, (d) => d.includes("chirp3-hd"))).toEqual({ perMillion: 30, freeChars: 1_000_000 });
+    expect(skuPrice(skus, (d) => d === "neural translation model predictions")).toBeNull();
+    expect(skuPrice(skus, (d) => d === "missing")).toBeNull();
+  });
+
+  it("splits Soniox's daily costs into this month and last month", () => {
+    const now = new Date("2026-11-16T14:00:00Z");
+    expect(
+      spendByMonth(["2026-10-01", "2026-10-31", "2026-11-01", "2026-11-16"], ["1.005", "0.5", "0.25", "nope"], now),
+    ).toEqual({ thisMonth: "2026-11", thisMonthUsd: 0.25, lastMonth: "2026-10", lastMonthUsd: 1.51 });
+    expect(spendByMonth(["2025-12-31", "2026-01-02"], ["2", "3"], new Date("2026-01-05T00:00:00Z"))).toMatchObject({
+      lastMonth: "2025-12",
+      lastMonthUsd: 2,
+      thisMonthUsd: 3,
+    });
+  });
+
+  it("shows spending to the sound desk only", async () => {
+    expect((await fetch(`http://127.0.0.1:${app.port}/spend`)).status).toBe(401);
+    expect((await fetch(`http://127.0.0.1:${app.port}/spend`, { headers: { Authorization: "Bearer wrong" } })).status).toBe(401);
+    const body = await fetch(`http://127.0.0.1:${app.port}/spend`, { headers: { Authorization: "Bearer secret" } }).then((r) =>
+      r.json(),
+    );
+    expect(body.soniox).toMatchObject({ thisMonthUsd: 0, lastMonthUsd: 0 });
+    expect(body.google).toBeNull();
+  });
+
+  it("serves nothing until the server has read the prices", async () => {
+    const body = await fetch(`http://127.0.0.1:${app.port}/prices`).then((r) => r.json());
+    expect(body).toEqual({ google: null });
+  });
+});
+
+describe("session limit", () => {
+  it("reads whole minutes up to a day, and anything else as unset", () => {
+    expect(parseSessionMinutes("5")).toBe(5);
+    expect(parseSessionMinutes(7.4)).toBe(7);
+    expect(parseSessionMinutes("0.2")).toBe(1);
+    expect(parseSessionMinutes("600")).toBe(600);
+    expect(parseSessionMinutes(99_999)).toBe(24 * 60);
+    for (const raw of [undefined, null, "", " ", "0", "-3", "five"]) expect(parseSessionMinutes(raw)).toBeNull();
+  });
+
+  it("stops the session at the limit, ends listeners, and reports the time left", async () => {
+    await app.stop();
+    app = await start({ port: 0, timing: TIMING, sessionLimitMs: 600 });
+    await until(() => app.catalog.model !== null);
+    const status = await fetch(`http://127.0.0.1:${app.port}/status`).then((r) => r.json());
+    expect(status.sessionMinutesDefault).toBe(0.01);
+    const s = await speaker();
+    await s.opened();
+    const a = listener("original");
+    await a.opened();
+    const stats = await s.waitFor((m) => m.type === "stats" && typeof m.endsInS === "number");
+    expect(stats.endsInS).toBeLessThanOrEqual(1);
+    const stopped = await s.waitFor((m) => m.type === "stopped", 1200);
+    expect(stopped.reason).toBe("limit");
+    await a.waitFor((m) => m.type === "ended");
+  });
+
+  it("keeps the clock running across a reconnect", async () => {
+    await app.stop();
+    app = await start({ port: 0, timing: TIMING, sessionLimitMs: 800 });
+    await until(() => app.catalog.model !== null);
+    const first = await speaker();
+    await first.opened();
+    await sleep(400);
+    first.ws.terminate();
+    const again = await speaker();
+    await again.opened();
+    const stopped = await again.waitFor((m) => m.type === "stopped", 700);
+    expect(stopped.reason).toBe("limit");
+  });
+
+  it("defaults to Soniox's 300 minutes, and lets the sound desk replace it", async () => {
+    await app.stop();
+    app = await start({ port: 0, timing: TIMING });
+    await until(() => app.catalog.model !== null);
+    const status = await fetch(`http://127.0.0.1:${app.port}/status`).then((r) => r.json());
+    expect(status.sessionMinutesDefault).toBe(300);
+    const s = await speaker();
+    await s.opened();
+    const hello = await s.waitFor((m) => m.type === "hello");
+    expect(hello.sessionMinutesDefault).toBe(300);
+    expect(hello.sessionMinutes).toBeNull();
+    await s.waitFor((m) => m.type === "stats" && m.endsInS > 299 * 60);
+    s.ws.send(JSON.stringify({ type: "sessionLimit", minutes: 600 }));
+    await s.waitFor((m) => m.type === "stats" && m.endsInS > 599 * 60);
+    s.ws.send(JSON.stringify({ type: "sessionLimit", minutes: null }));
+    s.messages = [];
+    const back = await s.waitFor((m) => m.type === "stats");
+    expect(back.endsInS).toBeLessThanOrEqual(300 * 60);
+  });
+
+  it("replaces a Soniox stream before Soniox's own cap, so a longer session keeps captioning", async () => {
+    await app.stop();
+    app = await start({ port: 0, timing: { ...TIMING, streamMaxMs: 300 } });
+    await until(() => app.catalog.model !== null);
+    const s = await speaker();
+    await s.opened();
+    const a = listener("original");
+    await a.opened();
+    const talking = setInterval(() => s.ws.send(FRAME), 50);
+    try {
+      await until(() => soniox.sessions.length >= 2, 3000);
+      await until(() => soniox.sessions[0].closed);
+      await until(() => soniox.sessions[1].frames > 0);
+      expect(s.messages.some((m) => m.type === "stopped")).toBe(false);
+    } finally {
+      clearInterval(talking);
+    }
   });
 });

@@ -1,10 +1,10 @@
 export const ORIGINAL = "original";
 /** Keep these in step with PROTOCOL_VERSION and SETUP_VERSION in the backend. */
-export const PROTOCOL_VERSION = "4.3.0";
+export const PROTOCOL_VERSION = "4.4.0";
 /** Installs that have never recorded a setup version. */
 export const SETUP_BASELINE = "1.0.0";
-/** The install a venue needs. This one asks about spoken captions and the context for Soniox. */
-export const SETUP_VERSION = "1.2.0";
+/** The install a venue needs. This one asks about Google Translate, spoken captions, the context for Soniox, and the session length. */
+export const SETUP_VERSION = "1.3.0";
 
 export interface ProtocolVersion {
   major: number;
@@ -79,6 +79,8 @@ export interface Status {
   paused: boolean;
   /** A sound desk is connected right now. Missing on a server that hasn't updated yet. */
   streaming?: boolean;
+  /** Session length from the install, in minutes. A sound desk may replace it. Missing on a server that hasn't updated yet. */
+  sessionMinutesDefault?: number;
   version: string;
   /** Major protocol. Older servers send only this. */
   protocol: number;
@@ -112,6 +114,8 @@ export interface Status {
 
 export interface Languages {
   speech: string[];
+  /** Google Translate: not on Google Cloud, still loading, or listed. Missing on a server that hasn't updated yet. */
+  google?: "off" | "loading" | "ready";
   /** `name` is Google's English name, for languages browsers can't name themselves. */
   targets: { code: string; via: "soniox" | "google"; name?: string; audio?: boolean }[];
 }
@@ -208,8 +212,53 @@ export async function getStatus(backend = getBackend()): Promise<Status | null> 
   }
 }
 
-export async function getLanguages(): Promise<Languages | null> {
-  const backend = getBackend();
+/** Google's list prices in US dollars, as the server last read them. Null until it has. */
+export interface GooglePrices {
+  readAt: string;
+  translatePerMillion: number | null;
+  speechPerMillion: number | null;
+  speechFreeChars: number | null;
+}
+
+export async function getPrices(backend: string): Promise<GooglePrices | null> {
+  try {
+    const res = await fetch(`${backend}/prices`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    return res.ok ? (((await res.json()) as { google?: GooglePrices | null }).google ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** This venue's Soniox spending in US dollars. Months are UTC, "2026-11". */
+export interface SonioxSpend {
+  readAt: string;
+  thisMonth: string;
+  thisMonthUsd: number;
+  lastMonth: string;
+  lastMonthUsd: number;
+}
+
+export interface Spend {
+  soniox: SonioxSpend | null;
+  sonioxError: string | null;
+  google: GooglePrices | null;
+}
+
+/** Sound desk only. Null when the server is older than this, or unreachable. */
+export async function getSpend(backend: string, token: string): Promise<Spend | null> {
+  try {
+    const res = await fetch(`${backend}/spend`, {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    return res.ok ? ((await res.json()) as Spend) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getLanguages(backend = getBackend()): Promise<Languages | null> {
   if (!backend) return null;
   try {
     const res = await fetch(`${backend}/languages`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });

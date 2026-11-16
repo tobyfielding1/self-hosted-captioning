@@ -4,7 +4,7 @@ import { WebSocketServer } from "ws";
 import { Catalog, type ChirpVoice } from "./catalog.js";
 import * as gcp from "./gcp.js";
 import * as log from "./log.js";
-import { Hub, type Timing } from "./rooms.js";
+import { DEFAULT_SESSION_MIN, Hub, parseSessionMinutes, type Timing } from "./rooms.js";
 import { regionLabel } from "./soniox.js";
 import { speak } from "./tts.js";
 import { googleTranslator, type Translator } from "./translate.js";
@@ -15,9 +15,9 @@ const VERSION = typeof __VERSION__ === "string" ? __VERSION__ : "dev";
 // Major stays a number so a page from the previous release still accepts this server.
 // PROTOCOL_VERSION is the code. A cold start picks it up. Bump minor for an optional code change, patch for a security fix in the code, major when an old server cannot be trusted.
 export const PROTOCOL = 4;
-export const PROTOCOL_VERSION = "4.3.0";
+export const PROTOCOL_VERSION = "4.4.0";
 // SETUP_VERSION is the install. setup.sh records it, including the Node image it selects. A cold start does not. Bump minor for a new question or a new Node major, patch for a security fix that needs the install, major when an old install cannot be trusted.
-export const SETUP_VERSION = "1.2.0";
+export const SETUP_VERSION = "1.3.0";
 
 function recordedSetup(): string | undefined {
   const recorded = process.env.SETUP_VERSION ?? "";
@@ -31,6 +31,7 @@ export interface StartOptions {
   timing?: Partial<Timing>;
   translator?: Translator;
   speaker?: ((text: string, voice: ChirpVoice, speakingRate: number) => Promise<Buffer>) | null;
+  sessionLimitMs?: number;
 }
 
 export interface Running {
@@ -59,6 +60,8 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
   if (!speakerToken) log.error("SPEAKER_TOKEN is not set; the sound desk can't connect");
 
   const startedAt = Date.now();
+  // An install from before the question has no MAX_SESSION_MIN, and gets Soniox's stream limit.
+  const sessionLimitMs = opts.sessionLimitMs ?? (parseSessionMinutes(process.env.MAX_SESSION_MIN) ?? DEFAULT_SESSION_MIN) * 60_000;
   const catalog = new Catalog(key);
   catalog.start();
   let region: string | null = null;
@@ -79,6 +82,7 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
     billingAccount: process.env.BILLING_ACCOUNT || null,
     venue: process.env.VENUE_NAME || null,
     spoken: process.env.SPOKEN === "1",
+    sessionMinutesDefault: sessionLimitMs / 60_000,
     sonioxRegion: catalog.sonioxRegion === null ? null : regionLabel(catalog.sonioxRegion),
     sonioxFasterRegion: catalog.sonioxFasterRegion,
     model: catalog.model,
@@ -93,6 +97,7 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
     timing: opts.timing,
     info,
     defaultContext: process.env.SONIOX_CONTEXT ?? "",
+    sessionLimitMs,
   });
 
   const server = http.createServer((req, res) => {
@@ -109,18 +114,31 @@ export async function start(opts: StartOptions = {}): Promise<Running> {
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify(body));
     };
+    const header = req.headers.authorization ?? "";
+    const given = header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
+    const isDesk = () => !!speakerToken && tokenMatches(given, speakerToken);
     if (path === "/speaker-check") {
-      const header = req.headers.authorization ?? "";
-      const given = header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
-      if (!speakerToken || !tokenMatches(given, speakerToken)) {
+      res.writeHead(isDesk() ? 204 : 401).end();
+      return;
+    }
+    // Spending is for the sound desk only.
+    if (path === "/spend") {
+      if (!isDesk()) {
         res.writeHead(401).end();
         return;
       }
-      res.writeHead(204).end();
+      void catalog.sonioxSpend().then(
+        (soniox) => json({ soniox, sonioxError: null, google: catalog.prices }),
+        (e) => {
+          log.warn("soniox spend failed", { err: String(e) });
+          json({ soniox: null, sonioxError: "Soniox didn't return this project's spending.", google: catalog.prices });
+        },
+      );
       return;
     }
     if (path === "/status") return json({ live: hub.live, paused: hub.paused, streaming: hub.streaming, ...info(), ready: !!catalog.model, error: catalog.error });
     if (path === "/languages") return json(catalog.languages());
+    if (path === "/prices") return json({ google: catalog.prices });
     if (path === "/" || path === "/healthz") return json({ ok: true });
     res.writeHead(404).end();
   });

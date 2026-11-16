@@ -12,6 +12,16 @@ async function metadata(path: string): Promise<string | null> {
   }
 }
 
+/** Cloud Run sets K_SERVICE. Elsewhere (a laptop, a test) Google services are off unless a project is named. */
+export function onGoogleCloud(): boolean {
+  return !!(process.env.K_SERVICE || process.env.GOOGLE_CLOUD_PROJECT);
+}
+
+/** The install asks. "0" is no; an install from before the question has no value and was always on. */
+export function translateEnabled(): boolean {
+  return onGoogleCloud() && process.env.GOOGLE_TRANSLATE !== "0";
+}
+
 export async function projectId(): Promise<string | null> {
   return process.env.GOOGLE_CLOUD_PROJECT || (await metadata("project/project-id"));
 }

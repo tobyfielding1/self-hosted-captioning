@@ -54,9 +54,22 @@ export function Card({ title, children }: { title?: ReactNode; children: ReactNo
   );
 }
 
-export function Details({ summary, open, children }: { summary: string; open?: boolean; children: ReactNode }) {
+export function Details({
+  summary,
+  open,
+  onOpen,
+  children,
+}: {
+  summary: string;
+  open?: boolean;
+  onOpen?: () => void;
+  children: ReactNode;
+}) {
   return (
-    <details open={open} className="bg-white rounded-2xl border border-purple/30 p-4 group dark:bg-white/10 dark:border-white/15">
+    <details
+      open={open}
+      onToggle={onOpen && ((e) => e.currentTarget.open && onOpen())}
+      className="bg-white rounded-2xl border border-purple/30 p-4 group dark:bg-white/10 dark:border-white/15">
       <summary className="cursor-pointer font-semibold text-midnight select-none dark:text-white">{summary}</summary>
       <div className="pt-3 space-y-3">{children}</div>
     </details>

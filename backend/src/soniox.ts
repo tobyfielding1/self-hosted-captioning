@@ -136,6 +136,7 @@ export class SonioxStream extends EventEmitter {
   private ended = false;
   private failed = false;
   finishing = false;
+  readonly openedAt = Date.now();
   lastAudioAt = Date.now();
 
   constructor(url: string, key: string, config: StreamConfig) {

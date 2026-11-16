@@ -30,9 +30,27 @@ One context text goes to every Soniox stream as `context.text`. The install asks
 
 The text can name people. It goes only to the sound desk `hello`, never `/status`, and the log records its length, not the text. Soniox rejects more than about 10,000 characters, so the page, server and install all cut it there.
 
+## Google Translate
+
+Opt-in at install, like spoken captions (`GOOGLE_TRANSLATE=1` or `0`). An install from before the question has no value and was always on, so missing means on; the install writes `0` for no. `/languages` reports `google` as `off` (turned off, or not on Google Cloud), `loading` (retrying with backoff; a missing project or token is a failure, not an empty list) or `ready`. The audience chooser shows the Soniox/Google labels only when both appear.
+
+## Prices
+
+The install and the server read Google's prices from the Cloud Billing catalog (`price.py`, `backend/src/prices.ts`). Translate's free 500,000 characters are a monthly credit, not a price tier, so they are stated, not read. Soniox has no price list to read; the home page's Soniox figures are dated (`PRICES_AS_OF` in `VenueView.tsx`). The home page asks the demo server for languages and prices only when someone opens or presses them, so a visit doesn't wake it.
+
+The sound desk's Spending section reads `/spend`, which needs the desk token. Soniox spend comes from Soniox's usage summary (daily cost totals), not from usage logs. Google has no API for spend without a BigQuery billing export, so Google stays a link to the billing report. Spend is fetched when the section is opened.
+
 ## Spoken captions
 
 Off unless the venue answered yes at install (`SPOKEN=1`). Pace starts at 0.8 and may rise toward 2, by at most 0.05 per clip, only while that language is still playing earlier lines. It returns to 0.8 when the last listener turns sound off or the desk pauses.
+
+## Session limit
+
+A session stops after a set number of minutes, and the desk presses Start to carry on. The install asks for the default (`MAX_SESSION_MIN`, 1 to 1440). A sound desk can replace it in Settings, stored in that browser under `captioning.sessionMinutes`; a missing key means the install default. An install without the variable gets 300, Soniox's own stream limit. A reconnect inside the grace period keeps the same clock.
+
+Soniox cuts one stream at 300 minutes. The server replaces each stream at 290 (`streamMaxMs`), letting the old one finish its last words, so a longer session keeps captioning. Do not cap the session at 300.
+
+The home page links to a public demo sound desk; its token is public on purpose. Its length is set on that server like any other venue, not in the page.
 
 ## Two version numbers
 
@@ -45,7 +63,7 @@ A frontend-only fix does not get a protocol bump. Bumping only the page makes ev
 
 `backend/boot.mjs` and these environment variables must keep working for servers already installed:
 
-`PORT`, `SONIOX_API_KEY`, `SONIOX_REGION`, `SPEAKER_TOKEN`, `BILLING_ACCOUNT`, `AUTO_UPDATE`, `VENUE_NAME`, `SPOKEN`, `SETUP_VERSION`, `SONIOX_CONTEXT`
+`PORT`, `SONIOX_API_KEY`, `SONIOX_REGION`, `SPEAKER_TOKEN`, `BILLING_ACCOUNT`, `AUTO_UPDATE`, `VENUE_NAME`, `SPOKEN`, `SETUP_VERSION`, `SONIOX_CONTEXT`, `MAX_SESSION_MIN`, `GOOGLE_TRANSLATE`
 
 `log.info` takes `Record<string, unknown>`. A typed object with no index signature does not count. Spread the fields. CI typechecks; a local test run does not.
 
@@ -57,4 +75,4 @@ Each tutorial is one Cloud Shell page: one `#` title and one `##` step. A second
 
 ## Checks
 
-`cd backend && npm test` and `npm run typecheck`. Frontend: `cd frontend && npm run typecheck`. The release workflow runs both, then publishes the site and `backend-latest`. A failed typecheck means venues keep the previous server.
+`cd backend && npm test` and `npm run typecheck`. Frontend: `cd frontend && npm run typecheck`. The release workflow runs both, then publishes site and server together from one commit: `main` → `backend-dev` and `/dev/`; a `v*` tag or manual prod publish → `backend-latest` and the live site. A failed typecheck means that channel is not updated.

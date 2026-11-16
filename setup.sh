@@ -88,6 +88,12 @@ trap cleanup EXIT
 
 bold() { spin_stop; printf '\n\033[1m%s\033[0m\n' "$*"; }
 note() { spin_stop; printf '   %s\n' "$*"; }
+# A long link wraps in Cloud Shell, and only its first row is clickable. OSC 8 makes it one link.
+link() {
+  spin_stop
+  if [ -t 1 ]; then printf '\n\033]8;;%s\033\\%s\033]8;;\033\\\n\n' "$1" "$1"
+  else printf '\n%s\n\n' "$1"; fi
+}
 fail() {
   spin_stop
   printf '\n\033[1;31m%s\033[0m\n' "$1"
@@ -355,7 +361,7 @@ if $ROTATE; then
     fail "Couldn't update the captioning server." "Try this again, or run the install."
   URL="$(gcloud run services describe "$SERVICE" --region "$EXISTING_REGION" --format='value(status.url)' 2>>"$LOG")"
   bold "Done! The old sound desk link no longer works. Open this new one:"
-  printf '\n   %s#backend=%s&token=%s\n\n' "$APP_URL" "${URL#https://}" "$TOKEN"
+  link "${APP_URL}#backend=${URL#https://}&token=${TOKEN}"
   note "Keep that link private. Open it once on each sound desk computer and bookmark it again."
   note "The QR code and audience link stay the same."
   exit 0
@@ -371,8 +377,9 @@ background() {
 
   step "Turning on Google Cloud services"
   local apis=(run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
-    translate.googleapis.com billingbudgets.googleapis.com cloudresourcemanager.googleapis.com)
-  # Spoken captions are off unless this install just accepted them. Missing means off.
+    billingbudgets.googleapis.com cloudresourcemanager.googleapis.com cloudbilling.googleapis.com)
+  # Google Translate and spoken captions are off unless this install accepted them.
+  if [ "${GOOGLE_TRANSLATE:-}" = "1" ]; then apis+=(translate.googleapis.com); fi
   if [ "${SPOKEN:-}" = "1" ]; then apis+=(texttospeech.googleapis.com); fi
   gcloud services enable "${apis[@]}" --quiet ||
     die "turning on Google Cloud services"
@@ -416,7 +423,7 @@ background() {
       sleep 5 # new service accounts take a few seconds to appear
     done
   }
-  grant "$run_sa" roles/cloudtranslate.user || die "setting up permissions"
+  if [ "${GOOGLE_TRANSLATE:-}" = "1" ]; then grant "$run_sa" roles/cloudtranslate.user || die "setting up permissions"; fi
   grant "$build_sa" roles/run.builder || die "setting up permissions"
 
   step "Checking the budget alert"
@@ -453,7 +460,7 @@ background() {
       case "$context" in *"$c"*) ;; *) d="$c"; break ;; esac
     done
     if [ -z "$d" ]; then d="@"; context="${context//@/ }"; fi
-    local vars="SPEAKER_TOKEN=${TOKEN}${d}BILLING_ACCOUNT=${BILLING}${d}VENUE_NAME=${DISPLAY}${d}SETUP_VERSION=${setup_version}"
+    local vars="SPEAKER_TOKEN=${TOKEN}${d}BILLING_ACCOUNT=${BILLING}${d}VENUE_NAME=${DISPLAY}${d}SETUP_VERSION=${setup_version}${d}MAX_SESSION_MIN=${MAX_SESSION_MIN}${d}GOOGLE_TRANSLATE=${GOOGLE_TRANSLATE}"
     if [ -n "${SPOKEN:-}" ]; then vars+="${d}SPOKEN=1"; fi
     if [ -n "$context" ]; then vars+="${d}SONIOX_CONTEXT=${context}"; fi
     if gcloud run deploy "$SERVICE" \
@@ -483,10 +490,44 @@ background() {
     step "Building the captioning server (about 3 minutes)"
   done
 }
-# Spoken captions are asked here, before the deploy starts, because that work runs in the background.
+# Prints a paragraph about an optional Google service, with its price read just now. See price.py.
+explain_price() {
+  local currency token paragraph
+  currency="$(gcloud billing accounts describe "$BILLING" --format='value(currencyCode)' 2>>"$LOG" || true)"
+  token="$(gcloud auth print-access-token 2>>"$LOG" || true)"
+  spin "Reading Google's current price"
+  paragraph="$(ACCESS_TOKEN="$token" python3 price.py "$1" "$currency" 2>>"$LOG")"
+  spin_stop
+  printf '\n%s\n\n' "$paragraph" | fold -s -w 78
+}
+
+# The optional Google services are asked here, before the deploy starts, because that work runs in the background.
 # Enter keeps the current choice. The figures are printed, not saved.
 # Stop the previous spinner first. It redraws the current line and would hide this question.
 spin_stop
+
+# Google Translate. An install from before this question has no GOOGLE_TRANSLATE and was always on.
+GOOGLE_TRANSLATE="$(env_value GOOGLE_TRANSLATE)"
+if [ -z "$GOOGLE_TRANSLATE" ] && [ -n "$(env_value SPEAKER_TOKEN)" ]; then GOOGLE_TRANSLATE=1; fi
+if [ "$GOOGLE_TRANSLATE" = "1" ]; then
+  note "Google Translate is on."
+  read -rp "   Leave Google Translate on? [Y/n] " answer
+  case "$answer" in
+    n|N|no|NO)
+      GOOGLE_TRANSLATE=0
+      note "Google Translate will turn off. The audience sees only the languages Soniox translates."
+      ;;
+    *) note "Google Translate stays on." ;;
+  esac
+else
+  explain_price translate
+  read -rp "   Turn Google Translate on? [y/N] " answer
+  case "$answer" in
+    y|Y|yes|YES) GOOGLE_TRANSLATE=1 ;;
+    *) GOOGLE_TRANSLATE=0 ;;
+  esac
+fi
+
 SPOKEN="$(env_value SPOKEN)"
 REMOVE_SPOKEN=""
 if [ "$SPOKEN" = "1" ]; then
@@ -502,102 +543,12 @@ if [ "$SPOKEN" = "1" ]; then
   esac
 else
   SPOKEN=""
-  explain_spoken() {
-    local currency token paragraph
-    currency="$(gcloud billing accounts describe "$BILLING" --format='value(currencyCode)' 2>>"$LOG" || true)"
-    token="$(gcloud auth print-access-token 2>>"$LOG" || true)"
-    spin "Reading Google's current Chirp 3 HD price"
-    paragraph="$(ACCESS_TOKEN="$token" python3 - "$currency" <<'PY'
-import json, os, sys, urllib.parse, urllib.request
-from decimal import Decimal, ROUND_HALF_UP
-
-LINK = "https://cloud.google.com/text-to-speech/pricing#latest-tts-models"
-HOURS_PER_MILLION = Decimal(30)
-TAIL = (
-    "It starts again next month. Anyone else listening to that same language hears the same stream, so they add nothing. "
-    "A language is spoken only while someone in the audience has sound on, and only while the sound desk is recording. "
-    "When recording stops, speech stops."
-)
-
-def fallback():
-    return (
-        "Spoken captions are optional. Google counts the characters spoken each month. "
-        f"The current Chirp 3 HD price is here: {LINK}. The allowance is monthly and starts again next month. "
-        "Anyone else listening to that same language hears the same stream, so they add nothing. "
-        "A language is spoken only while someone in the audience has sound on, and only while the sound desk is recording. "
-        "When recording stops, speech stops."
-    )
-
-def money(amount, currency):
-    text = f"{amount.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP):.2f}"
-    symbol = {"USD": "US$", "GBP": "£", "EUR": "€"}.get(currency)
-    return f"{symbol}{text}" if symbol else f"{currency} {text}"
-
-def unit_price(price):
-    return Decimal(price.get("units") or "0") + Decimal(price.get("nanos") or 0) / Decimal(1_000_000_000)
-
-def get(url, token):
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-    with urllib.request.urlopen(req, timeout=20) as res:
-        return json.load(res)
-
-def pages(url, token, key):
-    while url:
-        body = get(url, token)
-        yield from body.get(key) or []
-        nxt = body.get("nextPageToken")
-        if not nxt:
-            break
-        base = url.split("&pageToken=")[0].split("?pageToken=")[0]
-        url = f"{base}{'&' if '?' in base else '?'}pageToken={urllib.parse.quote(nxt)}"
-
-try:
-    token = os.environ.get("ACCESS_TOKEN") or ""
-    if not token:
-        raise RuntimeError("no token")
-    currency = (sys.argv[1] or "USD").upper()
-    service = next(
-        s for s in pages("https://cloudbilling.googleapis.com/v1/services?pageSize=5000", token, "services")
-        if s.get("displayName") == "Cloud Text-to-Speech API"
-    )
-    sku_url = f"https://cloudbilling.googleapis.com/v1/{service['name']}/skus?pageSize=5000&currencyCode={urllib.parse.quote(currency)}"
-    sku = next(
-        s for s in pages(sku_url, token, "skus")
-        if "chirp3-hd" in s.get("description", "").lower() and "character" in s.get("description", "").lower()
-    )
-    info = max(sku.get("pricingInfo") or [], key=lambda i: i.get("effectiveTime") or "")
-    paid = next(r for r in info["pricingExpression"]["tieredRates"] if unit_price(r["unitPrice"]) > 0)
-    code = paid["unitPrice"].get("currencyCode") or currency
-    free = Decimal(str(paid["startUsageAmount"]))
-    per_million = unit_price(paid["unitPrice"]) * Decimal(1_000_000)
-    hours = int((free / Decimal(1_000_000) * HOURS_PER_MILLION).quantize(Decimal(1), rounding=ROUND_HALF_UP))
-    hourly = per_million / HOURS_PER_MILLION
-    parts = [
-        "Spoken captions are optional. Google counts the characters spoken each month. "
-        f"These figures were just read from Google's current Chirp 3 HD price: {LINK}."
-    ]
-    charge = f"about {money(hourly, code)} an hour for each language being spoken through audience devices."
-    if hours > 0:
-        unit = "hour" if hours == 1 else "hours"
-        parts.append(f"Currently the free allowance is around {hours} {unit} of speech in one language.")
-        parts.append(f"After that, Google charges {charge}")
-    elif per_million > 0:
-        parts.append(f"Google charges {charge}")
-    parts.append(TAIL)
-    print(" ".join(parts))
-except Exception:
-    print(fallback())
-PY
-)"
-    spin_stop
-    printf '\n%s\n\n' "$paragraph" | fold -s -w 78
-    read -rp "   Turn spoken captions on? [y/N] " answer
-    case "$answer" in
-      y|Y|yes|YES) SPOKEN=1 ;;
-      *) SPOKEN="" ;;
-    esac
-  }
-  explain_spoken
+  explain_price speech
+  read -rp "   Turn spoken captions on? [y/N] " answer
+  case "$answer" in
+    y|Y|yes|YES) SPOKEN=1 ;;
+    *) SPOKEN="" ;;
+  esac
 fi
 
 # Context for Soniox: the default text for every sound desk. A desk can replace it in its own Settings.
@@ -625,6 +576,29 @@ case "$answer" in
     ;;
   *) SONIOX_CONTEXT="${answer:0:10000}" ;;
 esac
+
+# Session length: the default for every sound desk. A desk can replace it in its own Settings.
+# The default is Soniox's own stream limit, 300 minutes. Longer sessions work: the server replaces the stream.
+MAX_SESSION_MIN="$(env_value MAX_SESSION_MIN)"
+case "$MAX_SESSION_MIN" in ''|*[!0-9]*|0*) MAX_SESSION_MIN=300 ;; esac
+if [ "$MAX_SESSION_MIN" -gt 1440 ]; then MAX_SESSION_MIN=300; fi
+bold "How long can one recording run before it stops?"
+note "After this many minutes the captions stop, and the sound desk presses Start to carry on."
+note "Each sound desk can change this later under Settings."
+note "Press Enter to keep ${MAX_SESSION_MIN}."
+while :; do
+  read -rp "   Minutes (1 to 1440): " answer
+  answer="${answer//[[:space:]]/}"
+  [ -z "$answer" ] && break
+  case "$answer" in
+    *[!0-9]*) ;;
+    *)
+      answer=$((10#$answer))
+      if [ "$answer" -ge 1 ] && [ "$answer" -le 1440 ]; then MAX_SESSION_MIN="$answer"; break; fi
+      ;;
+  esac
+  note "Type a whole number of minutes from 1 to 1440 (24 hours), or press Enter to keep ${MAX_SESSION_MIN}."
+done
 background >>"$LOG" 2>&1 &
 BG_PID=$!
 
@@ -732,5 +706,5 @@ if [ "$CODE" = "403" ]; then
 fi
 
 bold "Done! Open this link to finish:"
-printf '\n   %s#backend=%s&token=%s\n\n' "$APP_URL" "${URL#https://}" "$TOKEN"
+link "${APP_URL}#backend=${URL#https://}&token=${TOKEN}"
 note "Keep that link private: it includes the sound desk's access."

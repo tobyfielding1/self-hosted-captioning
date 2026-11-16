@@ -31,6 +31,8 @@ const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAI
 /** How often a visible waiting page asks whether the sound desk is live. */
 const POLL_MS = 2_000;
 const GIVE_UP_MS = 2 * 60 * 60_000;
+/** How long the chooser waits for Google's languages before showing Soniox's alone. */
+const WARMING_WAIT_MS = 30_000;
 const MAX_LINES = 500;
 
 interface CaptionState {
@@ -50,6 +52,7 @@ export default function ListenView() {
   const [lang, setLang] = useState<string | null>(() => langFromUrl());
   const [choosing, setChoosing] = useState(() => !langFromUrl());
   const [languages, setLanguages] = useState<Languages | null>(null);
+  const [warming, setWarming] = useState(false);
   const [phase, setPhase] = useState<Phase>("checking");
   const [caption, setCaption] = useState<CaptionState>(EMPTY_CAPTION);
   const [withOriginal, setWithOriginal] = useState(() => localStorage.getItem(STORE.original) === "1");
@@ -94,17 +97,30 @@ export default function ListenView() {
     if (venue) document.title = venue;
   }, [venue]);
 
-  // The language list comes from the server, retrying while it wakes up.
+  // The language list comes from the server, retrying while it wakes up. While Google's list is
+  // loading the chooser says so, and shows Soniox's languages alone only after WARMING_WAIT_MS.
   useEffect(() => {
     if (!backend) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
+    let warmingSince = 0;
     const load = async () => {
       const [l, s] = await Promise.all([getLanguages(), getStatus()]);
       if (cancelled) return;
       if (s?.venue) setVenue(s.venue);
-      if (l && l.targets.length) setLanguages(l);
-      else timer = setTimeout(load, 5000);
+      if (!l || !l.targets.length) {
+        timer = setTimeout(load, 5000);
+        return;
+      }
+      if (l.google !== "loading") {
+        setWarming(false);
+        setLanguages(l);
+        return;
+      }
+      warmingSince ||= Date.now();
+      setWarming(true);
+      if (Date.now() - warmingSince >= WARMING_WAIT_MS) setLanguages(l);
+      timer = setTimeout(load, 3000);
     };
     void load();
     return () => {
@@ -326,6 +342,7 @@ export default function ListenView() {
     return (
       <LanguageChooser
         languages={languages}
+        warming={warming}
         current={lang ?? localStorage.getItem(STORE.lang)}
         venue={venue}
         onChoose={choose}
@@ -557,6 +574,7 @@ function ViaTag({ via }: { via: "soniox" | "google" }) {
 
 function LanguageChooser({
   languages,
+  warming,
   current,
   venue,
   onChoose,
@@ -564,6 +582,8 @@ function LanguageChooser({
   onDark,
 }: {
   languages: Languages | null;
+  /** Google's languages are still loading on the server. */
+  warming: boolean;
   current: string | null;
   venue: string | null;
   onChoose: (code: string) => void;
@@ -580,6 +600,8 @@ function LanguageChooser({
     [languages, names],
   );
   const via = useMemo(() => new Map((languages?.targets ?? []).map((t) => [t.code, t.via])), [languages]);
+  // With Google Translate off, every language is Soniox, so the labels and the explanation say nothing.
+  const mixed = useMemo(() => new Set(via.values()).size > 1, [via]);
   const q = filter.trim().toLocaleLowerCase();
   const matches = (code: string) => label(code, names.get(code)).toLocaleLowerCase().includes(q) || code.startsWith(q);
   const shown = q ? codes.filter(matches) : codes;
@@ -618,8 +640,17 @@ function LanguageChooser({
             <span className="block text-base text-gray-600 dark:text-white/70">Transcript of the words as spoken</span>
           </button>
         )}
-        {!languages && <p className="text-gray-500 dark:text-white/70">Loading languages...</p>}
-        {languages && !q && (
+        {!languages && (
+          <p className="text-gray-500 dark:text-white/70">
+            {warming ? "Translation services are warming up. Languages will appear in a moment..." : "Loading languages..."}
+          </p>
+        )}
+        {languages && warming && (
+          <p className="text-sm text-gray-500 dark:text-white/70">
+            More languages are still warming up and will appear here.
+          </p>
+        )}
+        {mixed && !q && (
           <p className="text-sm text-gray-500 dark:text-white/70">
             <ViaTag via="soniox" /> appears word by word, with faster, more natural translation, and costs your venue
             less. <ViaTag via="google" /> appears after each pause. If your language has both, choose Soniox.
@@ -636,7 +667,7 @@ function LanguageChooser({
                 } hover:bg-veil dark:hover:bg-white/10`}
               >
                 <span className="flex-1">{label(code, names.get(code))}</span>
-                {via.has(code) && <ViaTag via={via.get(code)!} />}
+                {mixed && via.has(code) && <ViaTag via={via.get(code)!} />}
               </button>
             </li>
           ))}

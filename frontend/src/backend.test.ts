@@ -21,7 +21,8 @@ describe("protocol version", () => {
     expect(protocolNotice(4, "4.1.0", "4.1.1")).toBe("patch");
     expect(protocolNotice(3, "3.4.1")).toBe("major");
     expect(protocolNotice(5, "5.0.0")).toBe("major");
-    expect(protocolNotice(4, "4.3.0")).toBeNull();
+    expect(protocolNotice(4, "4.3.0")).toBe("minor");
+    expect(protocolNotice(4, "4.4.0")).toBeNull();
     expect(protocolNotice(4, "nope")).toBe("minor");
     expect(protocolNotice("nope")).toBe("major");
   });
@@ -32,7 +33,8 @@ describe("setup version", () => {
     expect(setupNotice(undefined)).toBe("minor");
     expect(setupNotice("1.0.0")).toBe("minor");
     expect(setupNotice("1.1.0")).toBe("minor");
-    expect(setupNotice("1.2.0")).toBeNull();
+    expect(setupNotice("1.2.0")).toBe("minor");
+    expect(setupNotice("1.3.0")).toBeNull();
     expect(setupNotice("nope")).toBe("minor");
     expect(setupNotice("1.1.0", "1.1.1")).toBe("patch");
     expect(setupNotice("1.1.0", "2.0.0")).toBe("major");

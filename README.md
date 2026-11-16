@@ -48,6 +48,11 @@ cd frontend && npm install && npm run dev
 
 Tests: `cd backend && npm test`.
 
-Every push to `main` that passes typecheck, tests and build deploys the website and publishes `server.mjs` to `backend-latest`. Rollback is the **release** workflow with `ref` set to an older commit.
+Each environment keeps the site and server on the same commit:
+
+- Push to `main` → `backend-dev` and the_dev site at `/dev/`
+- A `v*` tag, or a manual **Release** run with target `prod` → `backend-latest` and the live site
+
+Venue servers pull `backend-latest` on cold start unless `UPDATE_URL` points at `backend-dev`. Rollback is the **Release** workflow with target `prod` and `ref` set to an older commit.
 
 Contributors, including coding agents, should read [AGENTS.md](AGENTS.md) before changing behaviour. It records the decisions that are easy to get wrong.

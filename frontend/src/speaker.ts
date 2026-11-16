@@ -8,6 +8,8 @@ export interface Stats {
   listeners: Record<string, number>;
   streams: string[];
   testing: boolean;
+  /** Seconds until the session limit stops this session. Only when the server has a limit. */
+  endsInS?: number;
 }
 
 export interface Preview {
@@ -22,8 +24,7 @@ export type ServerMessage =
   | ({ type: "preview" } & Preview)
   | { type: "endpoint"; endpointDelayMs: number; endpointSensitivity: number; endpointLatency: number }
   | { type: "error"; message: string }
-  | { type: "stopped"; reason: "idle" | "takeover" | "stopped" | "ended" };
-
+  | { type: "stopped"; reason: "idle" | "takeover" | "stopped" | "ended" | "limit" };
 const MAX_BUFFERED = 256 * 1024;
 
 /** The sound desk's connection. Reconnects on its own until stop() or the server ends the session. */

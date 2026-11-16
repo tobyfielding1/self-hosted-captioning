@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { audioSupported, guessMode, listInputs, startCapture, type Capture, type InputMode } from "../audio/capture";
 import { clampSendAfter, SEND_AFTER } from "../audio/gate";
-import { checkDeskAccess, getBackend, getStatus, getToken, listenerLink, parseProtocol, protocolNotice, setupNotice, siteRoot, speakLink, strongestNotice, type DeskAccess, type ProtocolNotice, type Status } from "../backend";
+import { checkDeskAccess, getBackend, getLanguages, getPrices, getSpend, getStatus, getToken, listenerLink, parseProtocol, protocolNotice, setupNotice, siteRoot, speakLink, strongestNotice, type DeskAccess, type GooglePrices, type Languages, type Spend, type ProtocolNotice, type Status } from "../backend";
 import { englishName } from "../lib/languages";
 import { useWakeLock, wakeLockSupported } from "../lib/wakeLock";
 import { createDeskGate } from "../audio/speech-model";
@@ -21,6 +21,19 @@ const INSTALL_URL = shellUrl("deploy.md");
 const ROTATE_URL = shellUrl("rotate.md");
 const NEWKEY_URL = shellUrl("newkey.md");
 const DELETE_URL = shellUrl("delete.md");
+// Public on purpose: the demo venue. The home page also reads its live language list.
+const DEMO_HOST = "captioning-idhlw6p5ka-ew.a.run.app";
+const DEMO_DESK_URL = `#backend=${DEMO_HOST}&token=07400c4702ba8651da12b3225f88a031`;
+const LANGUAGE_DOCS = {
+  soniox: "https://soniox.com/docs/stt/concepts/supported-languages",
+  google: "https://docs.cloud.google.com/translate/docs/languages#nmt",
+  chirp: "https://docs.cloud.google.com/text-to-speech/docs/chirp3-hd#language_availability",
+};
+const PRICING = {
+  soniox: "https://soniox.com/pricing?mode=translation&providers=soniox%2Copenai&delivery=realtime",
+  google: "https://cloud.google.com/products/translate/pricing#basic-pricing",
+  chirp: "https://cloud.google.com/text-to-speech/pricing",
+};
 const SONIOX_PROJECT = "https://console.soniox.com/org/projects/settings";
 const SONIOX_KEYS = "https://console.soniox.com/org/projects/api/keys";
 const TIP_DISMISSED = "captioning.fasterTipDismissed";
@@ -95,7 +108,12 @@ const STORE = {
   endpointLatency: "captioning.endpointLatency",
   /** Missing means the install default. An empty string means no context. */
   context: "captioning.context",
+  /** Missing means the install default. */
+  sessionMinutes: "captioning.sessionMinutes",
 };
+/** The server replaces the Soniox stream (capped at 300 minutes), so a session may run up to a day. */
+const MAX_SESSION_MIN = 24 * 60;
+const clampSessionMinutes = (n: number) => Math.min(MAX_SESSION_MIN, Math.max(1, Math.round(n)));
 
 /** The only copy of these defaults. Changing them ships with the page. */
 const ENDPOINT_DEFAULTS = { delayMs: 1500, sensitivity: 0.3, latency: 2 };
@@ -164,6 +182,17 @@ function describeListeners(listeners: Record<string, number>): string {
   return `${plural(total)} following (${parts.join(", ")})`;
 }
 
+/** Seconds as "4:05" or "1:04:05", or "5 minutes" / "5 hours" when it divides evenly. */
+function clock(s: number): string {
+  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  if (s >= 3600 && s % 3600 === 0) return unit(s / 3600, "hour");
+  if (s >= 60 && s % 60 === 0) return unit(s / 60, "minute");
+  const two = (n: number) => String(n).padStart(2, "0");
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h ? `${h}:${two(m)}:${two(s % 60)}` : `${m}:${two(s % 60)}`;
+}
+
 function Desk({ backend, token, shareOpen }: { backend: string; token: string; shareOpen: boolean }) {
   const supported = audioSupported();
 
@@ -181,6 +210,11 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
   const [endpoint, setEndpoint] = useState(readEndpoint);
   const [context, setContext] = useState<string | null>(() => localStorage.getItem(STORE.context));
   const [contextDraft, setContextDraft] = useState<string | null>(null);
+  const [sessionMinutes, setSessionMinutes] = useState<number | null>(() => {
+    const saved = readStored(STORE.sessionMinutes);
+    return saved === null || saved <= 0 ? null : clampSessionMinutes(saved);
+  });
+  const [sessionDraft, setSessionDraft] = useState<string | null>(null);
   const [conn, setConn] = useState<ConnState>("off");
   const [stats, setStats] = useState<Stats | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -200,13 +234,16 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
   endpointRef.current = endpoint;
   const contextRef = useRef(context);
   contextRef.current = context;
-
   const live = conn !== "off";
   const wakeLock = useWakeLock(live);
   const contextDefault = typeof hello?.contextDefault === "string" ? hello.contextDefault : null;
   const contextText = context ?? contextDefault ?? "";
   // An older server sends no contextDefault. Before the desk connects, only /status says what it runs.
   const contextShown = hello ? contextDefault !== null : acceptsContext(status?.protocolVersion);
+  // An older server sends no default and has no session limit.
+  const sessionDefault =
+    typeof hello?.sessionMinutesDefault === "number" ? hello.sessionMinutesDefault : (status?.sessionMinutesDefault ?? null);
+  const sessionShown = sessionMinutes ?? sessionDefault;
 
   // Context goes first: the server opens no stream until the endpoint settings arrive.
   const pushSettings = useCallback(
@@ -226,6 +263,10 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
     if (conn !== "live") return;
     pushSettings(endpoint, context);
   }, [conn, endpoint, context, pushSettings]);
+
+  useEffect(() => {
+    if (conn === "live") connRef.current?.sendControl({ type: "sessionLimit", minutes: sessionMinutes });
+  }, [conn, sessionMinutes]);
 
   useEffect(() => {
     let gone = false;
@@ -296,7 +337,9 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
               ? "Stopped because it was quiet for an hour. Press Start to begin again."
               : msg.reason === "takeover"
                 ? "Taken over by another device. Press Start to take it back."
-                : null,
+                : msg.reason === "limit"
+                  ? "Stopped at the time limit for one session. Press Start to begin again."
+                  : null,
           );
         }
       },
@@ -562,6 +605,10 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
           {headline}
         </p>
         {live && conn === "live" && stats?.testing && <p className="text-purple">Test captions running for a minute.</p>}
+        {live && stats?.endsInS !== undefined && <p>Stops automatically in {clock(stats.endsInS)}.</p>}
+        {!live && sessionShown !== null && (
+          <p>Each session stops automatically after {clock(Math.round(sessionShown * 60))}. Press Start again to carry on.</p>
+        )}
 
         {!live && status?.streaming && (
           <Banner tone="warn">
@@ -799,6 +846,52 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
             </div>
           </div>
         )}
+        {sessionDefault !== null && (
+          <div className="space-y-3">
+            <label className="font-semibold" htmlFor="session-minutes">
+              Session length (minutes)
+            </label>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Captions stop after this long, and you press Start to carry on. From 1 to {MAX_SESSION_MIN}. Applies to the
+              session running now. Stored in this browser.
+              {sessionMinutes === null ? " Using the length from the install." : ""}
+            </p>
+            <input
+              id="session-minutes"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={MAX_SESSION_MIN}
+              step={1}
+              className="w-32 rounded border border-gray-300 bg-white p-2 dark:border-gray-600 dark:bg-gray-800"
+              value={sessionDraft ?? String(sessionShown ?? "")}
+              onChange={(e) => setSessionDraft(e.target.value)}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={sessionDraft === null || !(Number(sessionDraft) > 0) || Number(sessionDraft) === sessionShown}
+                onClick={() => {
+                  const minutes = clampSessionMinutes(Number(sessionDraft));
+                  setSessionMinutes(minutes);
+                  setSessionDraft(null);
+                  localStorage.setItem(STORE.sessionMinutes, String(minutes));
+                }}
+              >
+                Save length
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setSessionMinutes(null);
+                  setSessionDraft(null);
+                  localStorage.removeItem(STORE.sessionMinutes);
+                }}
+              >
+                Reset to install default
+              </Button>
+            </div>
+          </div>
+        )}
         <p className="text-sm text-gray-600 dark:text-gray-300 break-all">
           Server: {backend}
           {status && ` (version ${status.version})`}
@@ -883,6 +976,21 @@ function Intro() {
       <p className="text-lg">
         Self-hosted captioning allows a venue to host a translation server on Google Cloud so the audience can read what is being spoken on their mobile devices in their own language. Self-hosting makes it extremely low cost for the venue.
       </p>
+      <Card title="Try it">
+        <p>
+          Open the{" "}
+          <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200" href={DEMO_DESK_URL}>
+            demo sound desk
+          </a>
+          , press Start and speak. Open the audience link it shows on your phone to read along.
+        </p>
+        <p className="text-gray-600 dark:text-gray-300">
+          Only one person can record at a time: starting takes over from whoever is using it. Demo recordings stop after
+          5 minutes and have to be started again.
+        </p>
+      </Card>
+      <LanguagesCard />
+      <CostCard />
       <Card title="Audience">
         <p>If you are in the audience, ask the venue for the audience link or QR code to read along.</p>
       </Card>
@@ -903,14 +1011,10 @@ function Intro() {
         </p>
         <p>
           Google Cloud hosts the server. Normal use stays in the free tier, but Google still asks for a card,
-          and the install emails you if this venue passes £5 a month. Transcripts and translations come from Soniox and Google Translate. Soniox is the part that costs money. You choose how
-          much credit to add, and it is only used while someone is being captioned: quiet audio isn't sent, and a
-          language runs only while someone is reading it. That costs less than a captioning service you subscribe to.
-          See{" "}
-          <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200" href="https://soniox.com/pricing" target="_blank" rel="noreferrer">
-            Soniox pricing
-          </a>
-          .
+          and the install emails you if this venue passes £5 a month. Captions and translations come from Soniox,
+          with Google Translate and spoken captions as options the install asks about. You choose how much Soniox
+          credit to add, and it is only used while someone is being captioned: quiet audio isn't sent, and a
+          language runs only while someone is reading it. See Cost above for examples.
         </p>
         <a
           href={INSTALL_URL}
@@ -928,6 +1032,178 @@ function Intro() {
         </p>
       </Card>
     </>
+  );
+}
+
+/** English name, or Google's name for a language the browser can't name. */
+function targetName(t: Languages["targets"][number]): string {
+  const name = englishName(t.code);
+  return name === t.code && t.name ? t.name : name;
+}
+
+function LanguageList({ summary, targets }: { summary: string; targets: Languages["targets"] }) {
+  if (!targets.length) return null;
+  const names = [...new Set(targets.map(targetName))].sort((a, b) => a.localeCompare(b));
+  return (
+    <details>
+      <summary className="cursor-pointer font-semibold">{summary}</summary>
+      <p className="pt-2 text-sm text-gray-600 dark:text-gray-300">{names.join(", ")}</p>
+    </details>
+  );
+}
+
+function LanguagesCard() {
+  // Read only when opened, so a visit to the home page doesn't wake the demo server.
+  const [languages, setLanguages] = useState<Languages | null | undefined>(undefined);
+  const [asked, setAsked] = useState(false);
+  const load = () => {
+    if (asked) return;
+    setAsked(true);
+    void getLanguages(`https://${DEMO_HOST}`).then(setLanguages);
+  };
+  const targets = languages?.targets ?? [];
+  const soniox = targets.filter((t) => t.via === "soniox");
+  const google = targets.filter((t) => t.via === "google");
+  const spoken = targets.filter((t) => t.audio);
+  return (
+    <Card title="Languages">
+      <p>
+        Soniox writes the captions and translates them live, word by word. Google Translate is an option at install: it
+        adds the languages Soniox doesn't translate, shown after each pause. Spoken captions are another option: phones
+        read the translation aloud with a Google Chirp 3 HD voice.
+      </p>
+      <p className="text-sm">
+        The providers' own lists: <ExtLink href={LANGUAGE_DOCS.soniox}>Soniox</ExtLink>,{" "}
+        <ExtLink href={LANGUAGE_DOCS.google}>Google Translate</ExtLink>,{" "}
+        <ExtLink href={LANGUAGE_DOCS.chirp}>Chirp 3 HD voices</ExtLink>.
+      </p>
+      <details onToggle={(e) => e.currentTarget.open && load()}>
+        <summary className="cursor-pointer font-semibold">Today's languages, from the demo server</summary>
+        <div className="pt-2 space-y-2">
+          {languages === undefined && (
+            <p className="text-sm text-gray-600 dark:text-gray-300">Asking the demo server. It can take a few seconds to wake up...</p>
+          )}
+          {languages === null && (
+            <p className="text-sm text-gray-600 dark:text-gray-300">The demo server didn't answer. The lists above are the providers' own.</p>
+          )}
+          {languages?.google === "loading" && (
+            <p className="text-sm text-gray-600 dark:text-gray-300">Google's languages are still warming up on the demo server.</p>
+          )}
+          <LanguageList summary={`Soniox: ${soniox.length} languages`} targets={soniox} />
+          <LanguageList summary={`Google Translate adds ${google.length} more`} targets={google} />
+          <LanguageList summary={`Spoken captions: ${spoken.length} languages`} targets={spoken} />
+        </div>
+      </details>
+    </Card>
+  );
+}
+
+/**
+ * Prices used for the cost examples, worked out on PRICES_AS_OF. Soniox publishes no price list to read, so its
+ * figures are always these. The Google ones can be replaced with what the demo server read from Google today.
+ * Soniox's translated hour is estimated from its token prices: $0.12 for the transcript plus about $0.06 for the translation.
+ */
+const PRICES_AS_OF = "November 2026";
+const DATED_PRICES = {
+  sonioxHour: 0.12,
+  sonioxTranslatedHour: 0.18,
+  translatePerMillion: 20,
+  /** A monthly US$10 credit, so Google's price list doesn't show it. */
+  translateFreeChars: 500_000,
+  speechPerMillion: 30,
+  speechFreeChars: 1_000_000,
+};
+/** About 30 hours of speech is a million characters. */
+const CHARS_PER_HOUR = 1_000_000 / 30;
+
+const usd = (n: number) => `$${n.toFixed(2)}`;
+const millions = (chars: number) => {
+  const m = chars / 1_000_000;
+  if (m < 1) return chars.toLocaleString("en-US");
+  return m === 1 ? "1 million" : `${Number(m.toFixed(2))} million`;
+};
+
+function CostCard() {
+  const [live, setLive] = useState<GooglePrices | null | undefined>(undefined);
+  const [asking, setAsking] = useState(false);
+  const p = {
+    ...DATED_PRICES,
+    ...(live?.translatePerMillion != null ? { translatePerMillion: live.translatePerMillion } : {}),
+    ...(live?.speechPerMillion != null ? { speechPerMillion: live.speechPerMillion } : {}),
+    ...(live?.speechFreeChars != null ? { speechFreeChars: live.speechFreeChars } : {}),
+  };
+
+  const hours = 30;
+  const chars = hours * CHARS_PER_HOUR;
+  const sonioxLanguages = 5 * hours * p.sonioxTranslatedHour;
+  const transcript = hours * p.sonioxHour;
+  const translateChars = 2 * chars;
+  const translate = (Math.max(0, translateChars - p.translateFreeChars) / 1_000_000) * p.translatePerMillion;
+  const speechChars = 2 * chars;
+  const speech = (Math.max(0, speechChars - p.speechFreeChars) / 1_000_000) * p.speechPerMillion;
+  const small = 6 * p.sonioxTranslatedHour;
+  const large = sonioxLanguages + transcript + translate + speech;
+
+  return (
+    <Card title="Cost">
+      <p>
+        You pay the providers directly, only while the sound desk is live and someone is reading. Each language costs
+        the same however many people read it. Hosting on Google Cloud normally stays in the free tier.
+      </p>
+      <div className="space-y-1">
+        <p className="font-semibold">6 hours a month, translated into 1 language by Soniox: about US{usd(small)} a month</p>
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          Soniox: 6 hours at about {usd(p.sonioxTranslatedHour)} an hour.
+        </p>
+      </div>
+      <div className="space-y-1">
+        <p className="font-semibold">
+          30 hours a month, 5 Soniox languages, 2 Google Translate languages and spoken captions in 2 languages: about
+          US{usd(large)} a month
+        </p>
+        <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-gray-300 space-y-1">
+          <li>
+            Soniox: 5 languages × 30 hours at about {usd(p.sonioxTranslatedHour)} = {usd(sonioxLanguages)}, plus the
+            transcript Google translates from, 30 hours at {usd(p.sonioxHour)} = {usd(transcript)}.
+          </li>
+          <li>
+            Google Translate: 2 languages × 1 million characters. The first {millions(p.translateFreeChars)} a month are
+            free, then {usd(p.translatePerMillion)} per million = {usd(translate)}.
+          </li>
+          <li>
+            Spoken captions: 2 languages × 1 million characters. The first {millions(p.speechFreeChars)} a month are free,
+            then {usd(p.speechPerMillion)} per million = {usd(speech)}. Two listeners in the same language share one voice.
+          </li>
+        </ul>
+      </div>
+      <p className="text-sm text-gray-600 dark:text-gray-300">
+        In US dollars. These assume 30 hours of speech is about 1 million characters. Soniox's translated hour is
+        estimated from its token prices.{" "}
+        {live
+          ? `Google's prices were read from Google today by the demo server; Soniox's are from ${PRICES_AS_OF}.`
+          : `Prices as of ${PRICES_AS_OF}, and they change.`}{" "}
+        Current prices: <ExtLink href={PRICING.soniox}>Soniox</ExtLink>,{" "}
+        <ExtLink href={PRICING.google}>Google Translate</ExtLink>, <ExtLink href={PRICING.chirp}>Chirp 3 HD</ExtLink>.
+      </p>
+      {!live && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="ghost"
+            disabled={asking}
+            onClick={() => {
+              setAsking(true);
+              void getPrices(`https://${DEMO_HOST}`).then((prices) => {
+                setLive(prices);
+                setAsking(false);
+              });
+            }}
+          >
+            {asking ? "Asking the demo server..." : "Use today's Google prices"}
+          </Button>
+          {live === null && <span className="text-sm text-gray-600 dark:text-gray-300">The demo server hasn't read them yet.</span>}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -1023,7 +1299,7 @@ function Finished({
         </div>
       </Details>
 
-      <Spending status={status} />
+      <Spending status={status} backend={backend} token={token} />
       </div>
     </>
   );
@@ -1112,18 +1388,49 @@ function googleServerUrl(project: string, region: string) {
   return `https://console.cloud.google.com/run/detail/${encodeURIComponent(region)}/captioning?project=${encodeURIComponent(project)}`;
 }
 
-function Spending({ status }: { status: Status | null | undefined }) {
+/** "2026-11" as "November 2026". */
+const monthName = (month: string) =>
+  new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+
+function Spending({ status, backend, token }: { status: Status | null | undefined; backend: string; token: string }) {
   const project = status?.project;
   const account = status?.billingAccount;
+  const [spend, setSpend] = useState<Spend | null | undefined>(undefined);
+  const [asked, setAsked] = useState(false);
+  // Asked when opened, not on every visit to this page.
+  const load = () => {
+    if (asked) return;
+    setAsked(true);
+    void getSpend(backend, token).then(setSpend);
+  };
+  const soniox = spend?.soniox;
+  const google = spend?.google;
   return (
-    <Details summary="Spending">
+    <Details summary="Spending" onOpen={load}>
       <p>
         Captions are billed in two places. Soniox charges for turning speech into captions and translations. Google Cloud
-        charges for hosting the server, which normal use keeps inside the free tier, and for Google Translate on the
-        languages that use it. Sign in with your account on each site.
+        charges for hosting the server, which normal use keeps inside the free tier, and for Google Translate and spoken
+        captions on the languages that use them. Figures are in US dollars.
       </p>
       <div>
         <p className="font-semibold">Soniox</p>
+        {spend === undefined && <p className="text-sm text-gray-600 dark:text-gray-300">Asking Soniox what this venue has spent...</p>}
+        {spend === null && (
+          <p className="text-sm text-gray-600 dark:text-gray-300">This server can't show spending yet. It will after its next update.</p>
+        )}
+        {spend?.sonioxError && <p className="text-sm text-gray-600 dark:text-gray-300">{spend.sonioxError}</p>}
+        {soniox && (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+            <dt>{monthName(soniox.thisMonth)} so far</dt>
+            <dd className="font-semibold">{usd(soniox.thisMonthUsd)}</dd>
+            <dt>{monthName(soniox.lastMonth)}</dt>
+            <dd className="font-semibold">{usd(soniox.lastMonthUsd)}</dd>
+          </dl>
+        )}
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          Soniox's prices as of {PRICES_AS_OF}: about {usd(DATED_PRICES.sonioxHour)} an hour for the transcript and{" "}
+          {usd(DATED_PRICES.sonioxTranslatedHour)} for each translated language, while someone is reading it.
+        </p>
         <ul className="list-disc pl-5 space-y-1">
           <li>
             <ExtLink href={SONIOX_USAGE}>Usage and cost</ExtLink> — what captions have cost, split by model.
@@ -1135,6 +1442,14 @@ function Spending({ status }: { status: Status | null | undefined }) {
       </div>
       <div>
         <p className="font-semibold">Google Cloud</p>
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          Google doesn't let the server read what has been spent, so open the report below.
+          {google?.translatePerMillion != null &&
+            ` Google Translate today: the first 500,000 characters a month free, then ${usd(google.translatePerMillion)} per million.`}
+          {google?.speechPerMillion != null &&
+            ` Spoken captions today: the first ${millions(google.speechFreeChars ?? 0)} characters a month free, then ${usd(google.speechPerMillion)} per million.`}{" "}
+          About 30 hours of speech is a million characters.
+        </p>
         {project ? (
           <ul className="list-disc pl-5 space-y-1">
             <li>

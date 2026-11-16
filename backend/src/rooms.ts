@@ -14,6 +14,8 @@ export interface Timing {
   testMs: number;
   statsMs: number;
   sweepMs: number;
+  /** A stream is replaced after this long, before Soniox's 300 minute cap cuts it mid-sentence. */
+  streamMaxMs: number;
 }
 
 export const DEFAULT_TIMING: Timing = {
@@ -23,6 +25,7 @@ export const DEFAULT_TIMING: Timing = {
   testMs: 60_000,
   statsMs: 3_000,
   sweepMs: 1_000,
+  streamMaxMs: 290 * 60_000,
 };
 
 interface Room {
@@ -58,6 +61,20 @@ export interface HubOptions {
   info?: () => Record<string, unknown>;
   /** Context text from the install. The sound desk may replace it. */
   defaultContext?: string;
+  /** Session length from the install. A session stops after this long and must be started again. The sound desk may replace it. */
+  sessionLimitMs?: number;
+}
+
+/** Soniox ends a real-time stream after 300 minutes, so that is the default session. Longer sessions replace the stream. */
+export const DEFAULT_SESSION_MIN = 300;
+export const MAX_SESSION_MIN = 24 * 60;
+
+/** Whole minutes from 1 to 24 hours, or null when the value is missing or not a positive number. */
+export function parseSessionMinutes(raw: unknown): number | null {
+  if (raw === null || raw === undefined || (typeof raw === "string" && !raw.trim())) return null;
+  const min = Number(raw);
+  if (!Number.isFinite(min) || min <= 0) return null;
+  return clamp(Math.round(min), 1, MAX_SESSION_MIN);
 }
 
 /** Soniox rejects a context over about 10,000 characters. */
@@ -189,6 +206,8 @@ export class Hub {
   private speaker: WebSocket | null = null;
   private graceTimer?: NodeJS.Timeout;
   private lastSpeechAt = 0;
+  /** Start of this session. A reconnect inside the grace period keeps it. */
+  private liveSince = 0;
   private testUntil = 0;
   private rooms = new Map<string, Room>();
   private streams = new Map<string, SonioxStream>();
@@ -204,6 +223,8 @@ export class Hub {
   private endpoint: EndpointSettings | null = null;
   /** Context from the sound desk. Null uses the install default. */
   private context: string | null = null;
+  /** Session length from the sound desk, in minutes. Null uses the install default. */
+  private sessionMinutes: number | null = null;
 
   constructor(private opts: HubOptions) {
     this.timing = { ...DEFAULT_TIMING, ...opts.timing };
@@ -227,6 +248,14 @@ export class Hub {
     return this.context ?? this.defaultContext();
   }
 
+  private defaultSessionMs(): number {
+    return this.opts.sessionLimitMs ?? DEFAULT_SESSION_MIN * 60_000;
+  }
+
+  private sessionLimitMs(): number {
+    return this.sessionMinutes === null ? this.defaultSessionMs() : this.sessionMinutes * 60_000;
+  }
+
   close() {
     for (const t of this.timers) clearInterval(t);
     this.endSession("ended");
@@ -243,6 +272,7 @@ export class Hub {
     }
     clearTimeout(this.graceTimer);
     this.speaker = ws;
+    if (!this.live) this.liveSince = Date.now();
     this.live = true;
     this.lastSpeechAt = Date.now();
     log.info("speaker connected");
@@ -261,13 +291,15 @@ export class Hub {
       ...this.opts.info?.(),
       contextDefault: this.defaultContext(),
       context: this.context,
+      sessionMinutesDefault: this.defaultSessionMs() / 60_000,
+      sessionMinutes: this.sessionMinutes,
     });
     if (this.opts.catalog.error) send(ws, { type: "error", message: this.opts.catalog.error });
     this.sendStats();
   }
 
   private onSpeakerMessage(text: string) {
-    let msg: { type?: string; paused?: boolean; text?: unknown };
+    let msg: { type?: string; paused?: boolean; text?: unknown; minutes?: unknown };
     try {
       msg = JSON.parse(text);
     } catch {
@@ -283,6 +315,9 @@ export class Hub {
       if (next) this.setEndpoint(next);
     } else if (msg.type === "context") {
       this.setContext(parseContext(msg.text));
+    } else if (msg.type === "sessionLimit") {
+      this.sessionMinutes = parseSessionMinutes(msg.minutes);
+      this.sendStats();
     }
   }
 
@@ -344,7 +379,7 @@ export class Hub {
     this.sendStats();
   }
 
-  endSession(reason: "stopped" | "ended" | "idle") {
+  endSession(reason: "stopped" | "ended" | "idle" | "limit") {
     const wasLive = this.live;
     this.live = false;
     this.paused = false;
@@ -672,10 +707,20 @@ export class Hub {
         stream.finish();
         this.streams.delete(key);
         log.info("stream closed", { lang: key, why: "silence" });
+      } else if (now - stream.openedAt > this.timing.streamMaxMs) {
+        // The old stream still delivers its last words; the next audio frame opens the new one.
+        stream.finish();
+        this.streams.delete(key);
+        log.info("stream closed", { lang: key, why: "stream age" });
       }
     if (this.speaker && now - this.lastSpeechAt > this.timing.idleMs) {
       log.info("speaker idle cutoff");
       this.endSession("idle");
+    }
+    const limit = this.sessionLimitMs();
+    if (this.live && now - this.liveSince >= limit) {
+      log.info("session limit reached", { limitMs: limit });
+      this.endSession("limit");
     }
   }
 
@@ -688,6 +733,7 @@ export class Hub {
       listeners,
       streams: [...this.streams.keys()],
       testing: this.testUntil > Date.now(),
+      ...(this.live ? { endsInS: Math.max(0, Math.ceil((this.liveSince + this.sessionLimitMs() - Date.now()) / 1000)) } : {}),
     };
   }
 

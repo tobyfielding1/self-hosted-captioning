@@ -1,15 +1,25 @@
+# Two environments, each always FE+BE from the same commit:
+#   main push            → backend-dev    + site at …/self-hosted-captioning/dev/
+#   v* tag / manual prod → backend-latest + site at …/self-hosted-captioning/
+# Pages is one artifact with both trees, so publishing one side keeps the other.
 name: Release
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
     inputs:
+      target:
+        description: Which environment to publish (dev tracks main; prod is the live site)
+        type: choice
+        options: [dev, prod]
+        default: prod
       ref:
-        description: Commit, tag or branch to publish (use an older commit to roll back)
+        description: Commit, tag or branch to publish (leave blank for this run's default; use an older commit to roll back)
         required: false
-        default: main
+        default: ""
 
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'release' }}
@@ -21,16 +31,37 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.channel.outputs.channel }}
+      sha: ${{ steps.sha.outputs.sha }}
+      short: ${{ steps.sha.outputs.short }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Use the requested commit (rollback)
-        if: inputs.ref
+      - name: Pick the commit to publish
+        if: inputs.ref != ''
         run: git checkout --detach "$REF"
         env:
           REF: ${{ inputs.ref }}
+
+      - id: sha
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - id: channel
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "channel=none" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "channel=${{ inputs.target }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "channel=prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "channel=dev" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/setup-node@v7
         with:
@@ -42,13 +73,14 @@ jobs:
 
       - name: Backend
         working-directory: backend
+        env:
+          VERSION: ${{ steps.sha.outputs.short }}
         run: |
           npm ci
           npm run typecheck
           npm test
-          VERSION=$(git rev-parse --short=12 HEAD) npm run bundle
+          npm run bundle
           sha256sum server.mjs > server.mjs.sha256
-          # The bundle must load and export the launcher contract.
           node -e "import('./server.mjs').then(m => { if (typeof m.start !== 'function' || typeof m.stop !== 'function') process.exit(1) })"
 
       - name: Frontend
@@ -61,12 +93,7 @@ jobs:
           npm test
           npm run build
 
-      - if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: frontend/dist
-
-      - if: github.event_name != 'pull_request'
+      - if: steps.channel.outputs.channel != 'none'
         uses: actions/upload-artifact@v7
         with:
           name: backend
@@ -74,9 +101,116 @@ jobs:
             backend/server.mjs
             backend/server.mjs.sha256
 
-  pages:
+  # Upload this channel's server + site.tar.gz. Assemble Pages only when it won't wipe the other side.
+  publish:
     needs: check
-    if: github.event_name != 'pull_request'
+    if: needs.check.outputs.channel != 'none'
+    runs-on: ubuntu-latest
+    outputs:
+      pages: ${{ steps.pages.outputs.ready }}
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      CHANNEL: ${{ needs.check.outputs.channel }}
+      SHORT: ${{ needs.check.outputs.short }}
+      SHA: ${{ needs.check.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.check.outputs.sha }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: backend
+
+      - name: Build this channel's site
+        working-directory: frontend
+        env:
+          VITE_BASE: ${{ needs.check.outputs.channel == 'prod' && format('/{0}/', github.event.repository.name) || format('/{0}/dev/', github.event.repository.name) }}
+        run: |
+          npm ci
+          npm run build
+          printf '%s\n' "$SHA" > dist/COMMIT
+          tar -C dist -czf "$GITHUB_WORKSPACE/site.tar.gz" .
+
+      - name: Assemble Pages (prod at /,dev at /dev/)
+        id: pages
+        run: |
+          set -euo pipefail
+          mkdir -p site/dev
+          if [ "$CHANNEL" = "prod" ]; then
+            OTHER=backend-dev
+          else
+            OTHER=backend-latest
+          fi
+
+          HAS_OTHER=0
+          if gh release download "$OTHER" --pattern site.tar.gz --output other-site.tar.gz 2>/dev/null; then
+            HAS_OTHER=1
+            if [ "$CHANNEL" = "prod" ]; then
+              tar -xzf other-site.tar.gz -C site/dev
+            else
+              tar -xzf other-site.tar.gz -C site
+            fi
+          else
+            echo "No $OTHER site.tar.gz yet."
+          fi
+
+          # A_dev publish without a saved prod site would wipe the live Pages root.
+          if [ "$CHANNEL" = "dev" ] && [ "$HAS_OTHER" -eq 0 ]; then
+            echo "ready=0" >> "$GITHUB_OUTPUT"
+            echo "Skipping Pages deploy until prod has published site.tar.gz once." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=1" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$CHANNEL" = "prod" ]; then
+            tar -xzf site.tar.gz -C site
+          else
+            tar -xzf site.tar.gz -C site/dev
+          fi
+
+      - name: Publish backend + site for this channel
+        run: |
+          set -euo pipefail
+          if [ "$CHANNEL" = "prod" ]; then
+            TAG=backend-latest
+            TITLE="Backend + site (live)"
+            NOTES="Live venue servers and the public site. FE and BE are the same commit. Cut by a v* tag or a manual Release run."
+          else
+            TAG=backend-dev
+            TITLE="Backend + site (dev)"
+            NOTES="Dev venue servers (UPDATE_URL → this release) and the /dev/ site. FE and BE are the same commit. Updated on every push to main."
+          fi
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" \
+            --title "$TITLE" --latest=false --notes "$NOTES"
+          {
+            echo "$NOTES"
+            echo
+            echo "Commit: \`$SHA\` (\`$SHORT\`)."
+          } > /tmp/notes.md
+          gh release edit "$TAG" --notes-file /tmp/notes.md
+          gh release upload "$TAG" server.mjs server.mjs.sha256 site.tar.gz --clobber
+          echo "Published $TAG from $SHORT" >> "$GITHUB_STEP_SUMMARY"
+
+      - if: steps.pages.outputs.ready == '1'
+        uses: actions/upload-artifact@v7
+        with:
+          name: pages
+          path: site
+
+  pages:
+    needs: publish
+    if: needs.publish.outputs.pages == '1'
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -85,27 +219,14 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - id: deploy
-        uses: actions/deploy-pages@v5
-
-  backend:
-    needs: check
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-    steps:
       - uses: actions/download-artifact@v8
         with:
-          name: backend
+          name: pages
+          path: site
 
-      - name: Publish to backend-latest
-        run: |
-          gh release view backend-latest >/dev/null 2>&1 || gh release create backend-latest \
-            --title "Backend (latest)" --latest=false \
-            --notes "Venues' servers download server.mjs from here each time they start. Published automatically by CI."
-          gh release upload backend-latest server.mjs server.mjs.sha256 --clobber
-          echo "Published $(cut -c1-12 server.mjs.sha256)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v5
