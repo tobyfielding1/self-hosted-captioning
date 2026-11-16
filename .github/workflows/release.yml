@@ -6,7 +6,7 @@
 # GitHub Pages dedupes by pages_build_version. actions/deploy-pages always uses
 # GITHUB_SHA for that (and the runner will not let a step override GITHUB_SHA), so
 # main→dev then a v* tag on the same commit would keep the first artifact. We deploy
-# via the Pages API with the artifact id as the build version instead (deploy-pages#383).
+# via the Pages API with a fresh empty-commit SHA as the build version (deploy-pages#383).
 name: Release
 
 on:
@@ -218,6 +218,7 @@ jobs:
     if: needs.publish.outputs.pages == '1'
     runs-on: ubuntu-latest
     permissions:
+      contents: write
       pages: write
       id-token: write
     environment:
@@ -236,18 +237,33 @@ jobs:
 
       # Not actions/deploy-pages: it always uses GITHUB_SHA as pages_build_version (and the
       # runner will not let a step override GITHUB_SHA), so main→dev then a v* tag on that
-      # commit keeps the first artifact. Create the deployment ourselves with a unique build
-      # version (artifact id). OIDC via core.getIDToken(), same as deploy-pages.
+      # commit keeps the first artifact. Create a unique empty commit SHA for pages_build_version
+      # (the API 404s on non-commit strings) and deploy with that.
       - id: deploy
         uses: actions/github-script@v8
         env:
           ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
+          CHANNEL: ${{ needs.check.outputs.channel }}
         with:
           script: |
             const artifactId = process.env.ARTIFACT_ID
             if (!artifactId) throw new Error('upload-pages-artifact did not return artifact_id')
             const oidc = await core.getIDToken()
-            const buildVersion = String(artifactId)
+            // pages_build_version must be a real commit SHA in the repo (other strings 404).
+            // Make a unique empty commit so main→dev then a same-SHA tag both publish.
+            const { data: head } = await github.rest.git.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+            })
+            const { data: empty } = await github.rest.git.createCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              message: `pages:${process.env.CHANNEL || 'site'}:${artifactId}`,
+              tree: head.tree.sha,
+              parents: [context.sha],
+            })
+            const buildVersion = empty.sha
             core.info(`Deploying Pages artifact ${artifactId} as build ${buildVersion}`)
             const { data: created } = await github.request('POST /repos/{owner}/{repo}/pages/deployments', {
               owner: context.repo.owner,
