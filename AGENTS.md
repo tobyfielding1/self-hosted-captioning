@@ -75,4 +75,4 @@ Each tutorial is one Cloud Shell page: one `#` title and one `##` step. A second
 
 ## Checks
 
-`cd backend && npm test` and `npm run typecheck`. Frontend: `cd frontend && npm run typecheck`. The release workflow runs both, then publishes site and server together from one commit: `main` → `backend-dev` and `/dev/`; a `v*` tag or manual prod publish → `backend-latest` and the live site. A failed typecheck means that channel is not updated.
+`cd backend && npm test` and `npm run typecheck`. Frontend: `cd frontend && npm run typecheck`. The release workflow runs both, then publishes site and server together from one commit: `main` → `backend-dev` and `/dev/`; a `v*` tag or manual prod publish → `backend-latest` and the live site. A failed typecheck means that channel is not updated. The GitHub Pages environment must allow deployments from `main` and from tags matching `v*` (Settings → Environments → github-pages), or a tag release updates the server but not the site.
