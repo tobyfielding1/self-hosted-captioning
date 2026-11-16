@@ -47,24 +47,32 @@ if $NEW_PROJECT && $ROTATE; then
 fi
 
 # Channel: which public site the desk link opens, and which GitHub release the server pulls.
-# The captions website opens Cloud Shell on tag backend-dev (/dev/) or backend-latest (live).
-# Cloud Shell URLs cannot set env vars, so detect which tag was checked out (reflog tip).
-# That still works when both tags point at the same commit after a prod publish of main.
-# CHANNEL=dev|prod overrides; otherwise fall back to tags on HEAD (dev only if uniquely tagged).
+# The captions website opens Cloud Shell on backend-dev (/dev/) or backend-latest (live).
+# Cloud Shell URLs cannot set env vars. Release publishes a branch and a tag with those names;
+# clone --branch attaches HEAD to the branch, so branch --show-current is the reliable signal
+# even when both refs point at the same commit. Fall back to reflog / unique tag on HEAD.
+# CHANNEL=dev|prod overrides.
 SITE_ROOT="https://tobyfielding1.github.io/self-hosted-captioning"
 RELEASE_BASE="https://github.com/tobyfielding1/self-hosted-captioning/releases/download"
 if [ -z "${CHANNEL:-}" ]; then
-  tip="$(git log -g -1 --pretty=%gs 2>/dev/null || true)"
-  case "$tip" in
-    *" to backend-dev") CHANNEL=dev ;;
-    *" to backend-latest") CHANNEL=prod ;;
+  branch="$(git branch --show-current 2>/dev/null || true)"
+  case "$branch" in
+    backend-dev) CHANNEL=dev ;;
+    backend-latest) CHANNEL=prod ;;
     *)
-      tags="$(git tag --points-at HEAD 2>/dev/null || true)"
-      if printf '%s\n' "$tags" | grep -qx backend-dev && ! printf '%s\n' "$tags" | grep -qx backend-latest; then
-        CHANNEL=dev
-      else
-        CHANNEL=prod
-      fi
+      tip="$(git log -g -1 --pretty=%gs 2>/dev/null || true)"
+      case "$tip" in
+        *" to backend-dev"|*" to refs/tags/backend-dev") CHANNEL=dev ;;
+        *" to backend-latest"|*" to refs/tags/backend-latest") CHANNEL=prod ;;
+        *)
+          tags="$(git tag --points-at HEAD 2>/dev/null || true)"
+          if printf '%s\n' "$tags" | grep -qx backend-dev && ! printf '%s\n' "$tags" | grep -qx backend-latest; then
+            CHANNEL=dev
+          else
+            CHANNEL=prod
+          fi
+          ;;
+      esac
       ;;
   esac
 fi

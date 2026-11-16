@@ -201,10 +201,13 @@ jobs:
             echo
             echo "Commit: \`$SHA\` (\`$SHORT\`)."
           } > /tmp/notes.md
-          # Move the mutable tag to this commit. Cloud Shell opens these tags for setup.sh;
-          # uploading assets alone left the tag on an old SHA.
+          # Move the mutable tag (GitHub release + cold-start assets) and a branch of the
+          # same name (Cloud Shell clone --branch). Upload alone left the tag on an old SHA;
+          # without the branch, clone detaches at the commit and setup.sh cannot tell
+          # backend-dev from backend-latest when both point at the same SHA.
           git tag -f "$TAG" "$SHA"
-          git push -f origin "refs/tags/$TAG"
+          git branch -f "$TAG" "$SHA"
+          git push -f origin "refs/tags/$TAG" "refs/heads/$TAG"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes-file /tmp/notes.md --target "$SHA"
           else
