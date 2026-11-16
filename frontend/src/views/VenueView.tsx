@@ -1052,19 +1052,44 @@ function LanguageList({ summary, targets }: { summary: string; targets: Language
   );
 }
 
+/** How long the home page keeps saying Google is warming up before it stops waiting. */
+const DEMO_WARMING_MS = 30_000;
+
 function LanguagesCard() {
   // Read only when opened, so a visit to the home page doesn't wake the demo server.
+  // While Google is still loading, poll a few times; after DEMO_WARMING_MS stop claiming it's about to appear.
   const [languages, setLanguages] = useState<Languages | null | undefined>(undefined);
-  const [asked, setAsked] = useState(false);
-  const load = () => {
-    if (asked) return;
-    setAsked(true);
-    void getLanguages(`https://${DEMO_HOST}`).then(setLanguages);
-  };
+  const [open, setOpen] = useState(false);
+  const [warmingSince, setWarmingSince] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const load = async () => {
+      const list = await getLanguages(`https://${DEMO_HOST}`);
+      if (cancelled) return;
+      setLanguages(list);
+      if (list?.google === "loading") {
+        setWarmingSince((t) => t ?? Date.now());
+        setNow(Date.now());
+        timer = setTimeout(load, 3000);
+        return;
+      }
+      setWarmingSince(null);
+    };
+    void load();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [open]);
   const targets = languages?.targets ?? [];
   const soniox = targets.filter((t) => t.via === "soniox");
   const google = targets.filter((t) => t.via === "google");
   const spoken = targets.filter((t) => t.audio);
+  const warming = languages?.google === "loading";
+  const waitedOut = warming && warmingSince != null && now - warmingSince >= DEMO_WARMING_MS;
   return (
     <Card title="Languages">
       <p>
@@ -1077,7 +1102,16 @@ function LanguagesCard() {
         <ExtLink href={LANGUAGE_DOCS.google}>Google Translate</ExtLink>,{" "}
         <ExtLink href={LANGUAGE_DOCS.chirp}>Chirp 3 HD voices</ExtLink>.
       </p>
-      <details onToggle={(e) => e.currentTarget.open && load()}>
+      <details
+        onToggle={(e) => {
+          const next = e.currentTarget.open;
+          setOpen(next);
+          if (!next) {
+            setLanguages(undefined);
+            setWarmingSince(null);
+          }
+        }}
+      >
         <summary className="cursor-pointer font-semibold">Today's languages, from the demo server</summary>
         <div className="pt-2 space-y-2">
           {languages === undefined && (
@@ -1086,12 +1120,22 @@ function LanguagesCard() {
           {languages === null && (
             <p className="text-sm text-gray-600 dark:text-gray-300">The demo server didn't answer. The lists above are the providers' own.</p>
           )}
-          {languages?.google === "loading" && (
+          {warming && !waitedOut && (
             <p className="text-sm text-gray-600 dark:text-gray-300">Google's languages are still warming up on the demo server.</p>
           )}
-          <LanguageList summary={`Soniox: ${soniox.length} languages`} targets={soniox} />
-          <LanguageList summary={`Google Translate adds ${google.length} more`} targets={google} />
-          <LanguageList summary={`Spoken captions: ${spoken.length} languages`} targets={spoken} />
+          {waitedOut && (
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Google's languages didn't load on the demo this time. Soniox's list is below; the provider link above has
+              Google's full set.
+            </p>
+          )}
+          {languages && <LanguageList summary={`Soniox: ${soniox.length} languages`} targets={soniox} />}
+          {languages?.google === "ready" && (
+            <LanguageList summary={`Google Translate adds ${google.length} more`} targets={google} />
+          )}
+          {languages && spoken.length > 0 && (
+            <LanguageList summary={`Spoken captions: ${spoken.length} languages`} targets={spoken} />
+          )}
         </div>
       </details>
     </Card>
