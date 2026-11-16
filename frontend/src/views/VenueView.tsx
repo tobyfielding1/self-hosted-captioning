@@ -15,11 +15,11 @@ const SONIOX_USAGE = "https://console.soniox.com/org/projects/usage/cost";
 const SONIOX_BILLING = "https://console.soniox.com/org/billing/reports";
 
 const REPO = "https://github.com/tobyfielding1/self-hosted-captioning";
-/** /dev/ site opens Cloud Shell on branch backend-dev; live site on backend-latest. */
+/** /dev/ site opens Cloud Shell on tag backend-dev; live site on backend-latest. */
 const SITE_CHANNEL = import.meta.env.BASE_URL.includes("/dev/") ? "dev" : "prod";
-const RELEASE_REF = SITE_CHANNEL === "dev" ? "backend-dev" : "backend-latest";
+const RELEASE_TAG = SITE_CHANNEL === "dev" ? "backend-dev" : "backend-latest";
 const shellUrl = (tutorial: string) =>
-  `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_git_branch=${encodeURIComponent(RELEASE_REF)}&cloudshell_tutorial=${encodeURIComponent(tutorial)}&show=terminal`;
+  `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_git_branch=${encodeURIComponent(RELEASE_TAG)}&cloudshell_tutorial=${encodeURIComponent(tutorial)}&show=terminal`;
 const INSTALL_URL = shellUrl("deploy.md");
 const ROTATE_URL = shellUrl("rotate.md");
 const NEWKEY_URL = shellUrl("newkey.md");
