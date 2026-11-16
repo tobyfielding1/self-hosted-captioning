@@ -3,9 +3,10 @@
 #   v* tag / manual prod → backend-latest + site at …/self-hosted-captioning/
 # Pages is one artifact with both trees, so publishing one side keeps the other.
 #
-# GitHub Pages dedupes deployments by GITHUB_SHA. Tagging the same commit that just
-# updated /dev/ must still replace the live site, so the deploy step overrides
-# GITHUB_SHA with channel + run id (see actions/deploy-pages#383).
+# GitHub Pages dedupes by pages_build_version. actions/deploy-pages always uses
+# GITHUB_SHA for that (and the runner will not let a step override GITHUB_SHA), so
+# main→dev then a v* tag on the same commit would keep the first artifact. We deploy
+# via the Pages API with the artifact id as the build version instead (deploy-pages#383).
 name: Release
 
 on:
@@ -228,12 +229,47 @@ jobs:
           name: pages
           path: site
 
-      - uses: actions/upload-pages-artifact@v5
+      - id: upload
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
+      # Not actions/deploy-pages: that always sets pages_build_version to GITHUB_SHA, which
+      # the runner pins, so a tag on the same commit as /dev/ would not replace the site.
       - id: deploy
-        uses: actions/deploy-pages@v5
         env:
-          # Unique per channel and run so main→dev then v* on the same commit both publish.
-          GITHUB_SHA: ${{ format('{0}-{1}-{2}', needs.check.outputs.sha, needs.check.outputs.channel, github.run_id) }}
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
+          CHANNEL: ${{ needs.check.outputs.channel }}
+          SHA: ${{ needs.check.outputs.sha }}
+        run: |
+          set -euo pipefail
+          : "${ARTIFACT_ID:?upload-pages-artifact did not return artifact_id}"
+          : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?}"
+          : "${ACTIONS_ID_TOKEN_REQUEST_URL:?}"
+          ID_TOKEN="$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=github" | jq -r .value)"
+          # Unique even when SHA matches a prior channel deploy for this commit.
+          BUILD_VERSION="${SHA}-${CHANNEL}-${GITHUB_RUN_ID}-${ARTIFACT_ID}"
+          echo "Deploying Pages artifact ${ARTIFACT_ID} as ${BUILD_VERSION}"
+          RESP="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/pages/deployments" \
+            -F "artifact_id=${ARTIFACT_ID}" \
+            -f "pages_build_version=${BUILD_VERSION}" \
+            -f "oidc_token=${ID_TOKEN}")"
+          ID="$(jq -r '.id // empty' <<<"$RESP")"
+          [ -n "$ID" ] || { echo "$RESP"; exit 1; }
+          echo "page_url=https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_OUTPUT"
+          for _ in $(seq 1 60); do
+            STATUS="$(gh api "repos/${GITHUB_REPOSITORY}/pages/deployments/${ID}" | jq -r .status)"
+            echo "Pages status: ${STATUS}"
+            case "$STATUS" in
+              succeed) echo "Reported success!"; exit 0 ;;
+              deployment_failed|deployment_content_failed|deployment_cancelled|deployment_lost)
+                echo "Pages deploy failed: ${STATUS}"
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+          echo "Timed out waiting for Pages deploy ${ID}"
+          exit 1
