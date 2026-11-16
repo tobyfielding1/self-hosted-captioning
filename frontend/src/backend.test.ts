@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getBackend, listenerLink, protocolNotice, setupNotice, speakLink, strongestNotice, wsUrl } from "./backend";
+import {
+  getBackend,
+  listenerLink,
+  PROTOCOL_VERSION,
+  protocolNotice,
+  setupNotice,
+  speakLink,
+  strongestNotice,
+  wsUrl,
+} from "./backend";
 
 const HOST = "captioning-f7729b.europe-west1.run.app";
 
@@ -22,7 +31,8 @@ describe("protocol version", () => {
     expect(protocolNotice(3, "3.4.1")).toBe("major");
     expect(protocolNotice(5, "5.0.0")).toBe("major");
     expect(protocolNotice(4, "4.3.0")).toBe("minor");
-    expect(protocolNotice(4, "4.4.0")).toBeNull();
+    expect(protocolNotice(4, "4.4.0", "4.5.0")).toBe("minor");
+    expect(protocolNotice(4, PROTOCOL_VERSION)).toBeNull();
     expect(protocolNotice(4, "nope")).toBe("minor");
     expect(protocolNotice("nope")).toBe("major");
   });
