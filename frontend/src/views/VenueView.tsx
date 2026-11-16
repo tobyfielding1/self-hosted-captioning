@@ -1010,11 +1010,12 @@ function Intro() {
           code that stays the same. The terminal lists any venues already on this account.
         </p>
         <p>
-          Google Cloud hosts the server. Normal use stays in the free tier, but Google still asks for a card,
-          and the install emails you if this venue passes £5 a month. Captions and translations come from Soniox,
-          with Google Translate and spoken captions as options the install asks about. You choose how much Soniox
-          credit to add, and it is only used while someone is being captioned: quiet audio isn't sent, and a
-          language runs only while someone is reading it. See Cost above for examples.
+          Google Cloud hosts the server. CPU and memory for normal use stay in the free tier; a little egress is
+          charged for audio leaving the server. Google still asks for a card, and the install emails you if this
+          venue passes £5 a month. Captions and translations come from Soniox, with Google Translate and spoken
+          captions as options the install asks about. You choose how much Soniox credit to add, and it is only used
+          while someone is being captioned: quiet audio isn't sent, and a language runs only while someone is reading
+          it. See Cost above for examples.
         </p>
         <a
           href={INSTALL_URL}
@@ -1146,6 +1147,7 @@ function LanguagesCard() {
  * Prices used for the cost examples, worked out on PRICES_AS_OF. Soniox publishes no price list to read, so its
  * figures are always these. The Google ones can be replaced with what the demo server read from Google today.
  * Soniox's translated hour is estimated from its token prices: $0.12 for the transcript plus about $0.06 for the translation.
+ * Cloud Run CPU/RAM free tier and internet egress are dated list prices (Tier 1 / own-continent planning figure).
  */
 const PRICES_AS_OF = "November 2026";
 const DATED_PRICES = {
@@ -1156,9 +1158,18 @@ const DATED_PRICES = {
   translateFreeChars: 500_000,
   speechPerMillion: 30,
   speechFreeChars: 1_000_000,
+  /** Cloud Run internet data transfer out, about own-continent Tier 1. */
+  egressPerGiB: 0.12,
 };
 /** About 30 hours of speech is a million characters. */
 const CHARS_PER_HOUR = 1_000_000 / 30;
+/** 16 kHz 16-bit mono PCM to each Soniox stream. */
+const PCM_GIB_PER_HOUR = (16_000 * 2 * 3600) / 1024 ** 3;
+/** Chirp's MP3 is 32 kbps; one copy leaves the server per spoken language. */
+const SPOKEN_GIB_PER_HOUR = ((32_000 / 8) * 3600) / 1024 ** 3;
+/** Request-based Cloud Run free tier (Tier 1), enough for the examples' live hours. */
+const CLOUD_RUN_FREE_VCPU_S = 180_000;
+const CLOUD_RUN_FREE_GIB_S = 360_000;
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
 const millions = (chars: number) => {
@@ -1166,6 +1177,7 @@ const millions = (chars: number) => {
   if (m < 1) return chars.toLocaleString("en-US");
   return m === 1 ? "1 million" : `${Number(m.toFixed(2))} million`;
 };
+const giBs = (n: number) => (n < 10 ? n.toFixed(1) : String(Math.round(n)));
 
 function CostCard() {
   const [live, setLive] = useState<GooglePrices | null | undefined>(undefined);
@@ -1177,6 +1189,29 @@ function CostCard() {
     ...(live?.speechFreeChars != null ? { speechFreeChars: live.speechFreeChars } : {}),
   };
 
+  const cloudRunFree = (liveHours: number) =>
+    liveHours * 3600 <= CLOUD_RUN_FREE_VCPU_S && liveHours * 3600 * 0.5 <= CLOUD_RUN_FREE_GIB_S;
+
+  const smallHours = 6;
+  const smallEgressGiB = 1 * smallHours * PCM_GIB_PER_HOUR;
+  const smallEgress = smallEgressGiB * p.egressPerGiB;
+  const small = smallHours * p.sonioxTranslatedHour + smallEgress;
+
+  // Halfway between the small and large examples: hours, Soniox languages, Google, and spoken.
+  const midHours = 18;
+  const midSonioxLangs = 3;
+  const midGoogleLangs = 1;
+  const midSpokenLangs = 1;
+  const midChars = midHours * CHARS_PER_HOUR;
+  const midSoniox = midSonioxLangs * midHours * p.sonioxTranslatedHour;
+  const midTranscript = midHours * p.sonioxHour;
+  const midTranslate = (Math.max(0, midGoogleLangs * midChars - p.translateFreeChars) / 1_000_000) * p.translatePerMillion;
+  const midSpeech = (Math.max(0, midSpokenLangs * midChars - p.speechFreeChars) / 1_000_000) * p.speechPerMillion;
+  const midSonioxStreams = midSonioxLangs + 1; // + Original/Google transcript stream
+  const midEgressGiB = midSonioxStreams * midHours * PCM_GIB_PER_HOUR + midSpokenLangs * midHours * SPOKEN_GIB_PER_HOUR;
+  const midEgress = midEgressGiB * p.egressPerGiB;
+  const mid = midSoniox + midTranscript + midTranslate + midSpeech + midEgress;
+
   const hours = 30;
   const chars = hours * CHARS_PER_HOUR;
   const sonioxLanguages = 5 * hours * p.sonioxTranslatedHour;
@@ -1185,20 +1220,52 @@ function CostCard() {
   const translate = (Math.max(0, translateChars - p.translateFreeChars) / 1_000_000) * p.translatePerMillion;
   const speechChars = 2 * chars;
   const speech = (Math.max(0, speechChars - p.speechFreeChars) / 1_000_000) * p.speechPerMillion;
-  const small = 6 * p.sonioxTranslatedHour;
-  const large = sonioxLanguages + transcript + translate + speech;
+  // One Soniox stream for Original/Google, plus one per Soniox language. Spoken audio is one stream per language.
+  const largeSonioxStreams = 6;
+  const largeSpokenStreams = 2;
+  const largeEgressGiB = largeSonioxStreams * hours * PCM_GIB_PER_HOUR + largeSpokenStreams * hours * SPOKEN_GIB_PER_HOUR;
+  const largeEgress = largeEgressGiB * p.egressPerGiB;
+  const large = sonioxLanguages + transcript + translate + speech + largeEgress;
 
   return (
     <Card title="Cost">
       <p>
         You pay the providers directly, only while the sound desk is live and someone is reading. Each language costs
-        the same however many people read it. Hosting on Google Cloud normally stays in the free tier.
+        the same however many people read it. Cloud Run CPU and memory for these examples stay inside Google's free
+        allowance; egress is charged for audio leaving the server.
       </p>
       <div className="space-y-1">
         <p className="font-semibold">6 hours a month, translated into 1 language by Soniox: about US{usd(small)} a month</p>
         <p className="text-sm text-gray-600 dark:text-gray-300">
-          Soniox: 6 hours at about {usd(p.sonioxTranslatedHour)} an hour.
+          Soniox: 6 hours at about {usd(p.sonioxTranslatedHour)} an hour = {usd(smallHours * p.sonioxTranslatedHour)}.
+          Cloud Run egress: one stream of 16 kHz audio to Soniox, about {giBs(smallEgressGiB)} GiB at{" "}
+          {usd(p.egressPerGiB)}/GiB = {usd(smallEgress)}.
         </p>
+      </div>
+      <div className="space-y-1">
+        <p className="font-semibold">
+          18 hours a month, 3 Soniox languages, 1 Google Translate language and spoken captions in 1 language: about
+          US{usd(mid)} a month
+        </p>
+        <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-gray-300 space-y-1">
+          <li>
+            Soniox: 3 languages × 18 hours at about {usd(p.sonioxTranslatedHour)} = {usd(midSoniox)}, plus the transcript
+            Google translates from, 18 hours at {usd(p.sonioxHour)} = {usd(midTranscript)}.
+          </li>
+          <li>
+            Google Translate: 1 language × {millions(midChars)} characters. The first {millions(p.translateFreeChars)} a
+            month are free, then {usd(p.translatePerMillion)} per million = {usd(midTranslate)}.
+          </li>
+          <li>
+            Spoken captions: 1 language × {millions(midChars)} characters. The first {millions(p.speechFreeChars)} a month
+            are free, then {usd(p.speechPerMillion)} per million = {usd(midSpeech)}.
+          </li>
+          <li>
+            Cloud Run: 18 hours stays inside the free CPU and memory allowance
+            {cloudRunFree(midHours) ? ` (${usd(0)})` : ""}. Egress: about {giBs(midEgressGiB)} GiB at{" "}
+            {usd(p.egressPerGiB)}/GiB = {usd(midEgress)}.
+          </li>
+        </ul>
       </div>
       <div className="space-y-1">
         <p className="font-semibold">
@@ -1218,16 +1285,23 @@ function CostCard() {
             Spoken captions: 2 languages × 1 million characters. The first {millions(p.speechFreeChars)} a month are free,
             then {usd(p.speechPerMillion)} per million = {usd(speech)}. Two listeners in the same language share one voice.
           </li>
+          <li>
+            Cloud Run: 30 hours on one 1 vCPU / 512 MiB instance stays inside the free CPU and memory allowance
+            {cloudRunFree(hours) ? ` (${usd(0)})` : ""}. Egress is audio to Soniox ({largeSonioxStreams} streams) and
+            spoken captions to phones ({largeSpokenStreams} languages at 32 kbps): about {giBs(largeEgressGiB)} GiB at{" "}
+            {usd(p.egressPerGiB)}/GiB = {usd(largeEgress)}.
+          </li>
         </ul>
       </div>
       <p className="text-sm text-gray-600 dark:text-gray-300">
         In US dollars. These assume 30 hours of speech is about 1 million characters. Soniox's translated hour is
-        estimated from its token prices.{" "}
+        estimated from its token prices. Quiet audio isn't sent, so real egress is often lower.{" "}
         {live
-          ? `Google's prices were read from Google today by the demo server; Soniox's are from ${PRICES_AS_OF}.`
+          ? `Google Translate and Chirp prices were read from Google today by the demo server; Soniox and Cloud Run egress are from ${PRICES_AS_OF}.`
           : `Prices as of ${PRICES_AS_OF}, and they change.`}{" "}
         Current prices: <ExtLink href={PRICING.soniox}>Soniox</ExtLink>,{" "}
-        <ExtLink href={PRICING.google}>Google Translate</ExtLink>, <ExtLink href={PRICING.chirp}>Chirp 3 HD</ExtLink>.
+        <ExtLink href={PRICING.google}>Google Translate</ExtLink>, <ExtLink href={PRICING.chirp}>Chirp 3 HD</ExtLink>,{" "}
+        <ExtLink href="https://cloud.google.com/run/pricing">Cloud Run</ExtLink>.
       </p>
       {!live && (
         <div className="flex flex-wrap items-center gap-3">
@@ -1453,8 +1527,8 @@ function Spending({ status, backend, token }: { status: Status | null | undefine
     <Details summary="Spending" onOpen={load}>
       <p>
         Captions are billed in two places. Soniox charges for turning speech into captions and translations. Google Cloud
-        charges for hosting the server, which normal use keeps inside the free tier, and for Google Translate and spoken
-        captions on the languages that use them. Figures are in US dollars.
+        charges for hosting (CPU/memory usually free; egress for audio leaving the server) and for Google Translate and
+        spoken captions on the languages that use them. Figures are in US dollars.
       </p>
       <div>
         <p className="font-semibold">Soniox</p>
