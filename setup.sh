@@ -48,16 +48,25 @@ fi
 
 # Channel: which public site the desk link opens, and which GitHub release the server pulls.
 # The captions website opens Cloud Shell on tag backend-dev (/dev/) or backend-latest (live).
-# Prefer CHANNEL=dev|prod from the tutorial; otherwise infer from tags on HEAD.
+# Cloud Shell URLs cannot set env vars, so detect which tag was checked out (reflog tip).
+# That still works when both tags point at the same commit after a prod publish of main.
+# CHANNEL=dev|prod overrides; otherwise fall back to tags on HEAD (dev only if uniquely tagged).
 SITE_ROOT="https://tobyfielding1.github.io/self-hosted-captioning"
 RELEASE_BASE="https://github.com/tobyfielding1/self-hosted-captioning/releases/download"
 if [ -z "${CHANNEL:-}" ]; then
-  tags="$(git tag --points-at HEAD 2>/dev/null || true)"
-  if printf '%s\n' "$tags" | grep -qx backend-dev && ! printf '%s\n' "$tags" | grep -qx backend-latest; then
-    CHANNEL=dev
-  else
-    CHANNEL=prod
-  fi
+  tip="$(git log -g -1 --pretty=%gs 2>/dev/null || true)"
+  case "$tip" in
+    *" to backend-dev") CHANNEL=dev ;;
+    *" to backend-latest") CHANNEL=prod ;;
+    *)
+      tags="$(git tag --points-at HEAD 2>/dev/null || true)"
+      if printf '%s\n' "$tags" | grep -qx backend-dev && ! printf '%s\n' "$tags" | grep -qx backend-latest; then
+        CHANNEL=dev
+      else
+        CHANNEL=prod
+      fi
+      ;;
+  esac
 fi
 case "$CHANNEL" in
   dev)

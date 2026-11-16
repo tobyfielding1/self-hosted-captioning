@@ -20,9 +20,9 @@ const SITE_CHANNEL = import.meta.env.BASE_URL.includes("/dev/") ? "dev" : "prod"
 const RELEASE_TAG = SITE_CHANNEL === "dev" ? "backend-dev" : "backend-latest";
 const shellUrl = (tutorial: string) =>
   `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_git_branch=${encodeURIComponent(RELEASE_TAG)}&cloudshell_tutorial=${encodeURIComponent(tutorial)}&show=terminal`;
-const INSTALL_URL = shellUrl(SITE_CHANNEL === "dev" ? "deploy-dev.md" : "deploy.md");
-const ROTATE_URL = shellUrl(SITE_CHANNEL === "dev" ? "rotate-dev.md" : "rotate.md");
-const NEWKEY_URL = shellUrl(SITE_CHANNEL === "dev" ? "newkey-dev.md" : "newkey.md");
+const INSTALL_URL = shellUrl("deploy.md");
+const ROTATE_URL = shellUrl("rotate.md");
+const NEWKEY_URL = shellUrl("newkey.md");
 const DELETE_URL = shellUrl("delete.md");
 // Public on purpose: the demo venue. The home page also reads its live language list.
 const DEMO_HOST = "captioning-idhlw6p5ka-ew.a.run.app";

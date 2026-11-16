@@ -69,7 +69,7 @@ A frontend-only fix does not get a protocol bump. Bumping only the page makes ev
 
 ## Cloud Shell tutorials
 
-Each tutorial is one Cloud Shell page: one `#` title and one `##` step. A second `##` becomes a Next button. `deploy.md` already covers a new venue and a re-run. Do not add a separate "another venue" tutorial. The live site opens Cloud Shell on tag `backend-latest` with `deploy.md`; `/dev/` opens tag `backend-dev` with `deploy-dev.md` (`CHANNEL=dev`). `setup.sh` sets `APP_URL` and `UPDATE_URL` from the channel so the desk link and cold-start pull match that site. Each channel publish force-moves that git tag to the published commit so Cloud Shell clones current setup scripts, not a stale tag.
+Each tutorial is one Cloud Shell page: one `#` title and one `##` step. A second `##` becomes a Next button. `deploy.md` already covers a new venue and a re-run. Do not add a separate "another venue" tutorial. The live site and `/dev/` both open the same tutorials; the page picks tag `backend-latest` or `backend-dev`. Cloud Shell cannot set env vars from the URL, so `setup.sh` reads which tag was checked out (reflog) and sets `APP_URL` / `UPDATE_URL` from that. Each channel publish force-moves that git tag to the published commit so Cloud Shell clones current setup scripts, not a stale tag.
 
 `./setup.sh --help` lists the flags. Unknown flags must exit non-zero.
 
