@@ -331,7 +331,7 @@ export default function ListenView() {
         <div className="max-w-xl mx-auto p-6 space-y-6">
           <h1 className="text-3xl font-bold">Live captions</h1>
           <p className="text-2xl">To follow live captions, scan the QR code at your venue with your phone camera.</p>
-          <a href={siteRoot()} className="inline-block text-base text-gray-500 underline">
+          <a href={siteRoot()} className="inline-block text-base text-gray-500 underline dark:text-white/90">
             Setting up captions for your venue?
           </a>
         </div>
@@ -402,7 +402,7 @@ export default function ListenView() {
           <p className="min-w-0 flex-1 truncate px-2 text-lg font-semibold text-midnight dark:text-white">
             {label(lang!, languages?.targets.find((t) => t.code === lang)?.name)}
           </p>
-          {phase === "reconnecting" && <span className="text-sm text-amber-700 dark:text-amber-400">Reconnecting...</span>}
+          {phase === "reconnecting" && <span className="text-sm text-amber-700 dark:text-amber-300">Reconnecting...</span>}
           {canHear && (
             <button
               type="button"
@@ -420,7 +420,7 @@ export default function ListenView() {
               }}
               className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${
                 audio
-                  ? "border-gray-400 bg-purple text-white dark:border-white/40"
+                  ? "border-purple bg-purple text-white dark:border-white/40"
                   : "border-purple/30 hover:bg-veil dark:border-white/40 dark:hover:bg-white/10"
               }`}
             >
@@ -435,7 +435,7 @@ export default function ListenView() {
               onClick={() => setWithOriginal((v) => !v)}
               className={`h-11 w-[calc(5.5rem+0.5rem)] shrink-0 rounded-lg border text-base font-semibold ${
                 withOriginal
-                  ? "border-gray-400 bg-purple text-white dark:border-white/40"
+                  ? "border-purple bg-purple text-white dark:border-white/40"
                   : "border-purple/30 hover:bg-veil dark:border-white/40 dark:hover:bg-white/10"
               }`}
             >
@@ -465,7 +465,7 @@ export default function ListenView() {
       {!follow && (
         <button
           onClick={() => setFollow(true)}
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-purple text-white px-5 py-2 text-lg shadow-lg border-2 border-gray-400 dark:border-white/40"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-purple text-white px-5 py-2 text-lg shadow-lg border-2 border-transparent dark:border-white/40"
         >
           Jump to live
         </button>
@@ -487,7 +487,7 @@ function Transcript({ caption }: { caption: CaptionState }) {
         <p className="mt-3">
           {caption.current}
           {caption.current && caption.partial && !caption.current.endsWith(" ") && " "}
-          {caption.partial && <span className="text-gray-400 dark:text-gray-300">{caption.partial}</span>}
+          {caption.partial && <span className="text-gray-400 dark:text-white/80">{caption.partial}</span>}
         </p>
       )}
     </div>
@@ -509,12 +509,18 @@ function StatusNote({
 }) {
   return (
     <>
-      {notice && <p className="mt-4 text-base text-amber-700 dark:text-amber-400">{notice}</p>}
+      {notice && <p className="mt-4 text-base text-amber-700 dark:text-amber-300">{notice}</p>}
       {message && (
-        <p className={`mt-6 ${empty ? "" : "text-base"} ${phase === "outdated" ? "text-red-700 dark:text-red-300" : "text-gray-500"}`}>{message}</p>
+        <p
+          className={`mt-6 ${empty ? "font-medium" : "text-base"} ${
+            phase === "outdated" ? "text-red-700 dark:text-red-300" : "text-gray-600 dark:text-white"
+          }`}
+        >
+          {message}
+        </p>
       )}
       {(phase === "ended" || phase === "gave-up") && (
-        <button onClick={onRetry} className="mt-4 text-base underline text-blue-600 hover:text-blue-800 dark:text-blue-300">
+        <button onClick={onRetry} className="mt-4 text-base underline text-blue-600 hover:text-blue-800 dark:text-blue-200">
           Check again
         </button>
       )}
@@ -565,7 +571,7 @@ function ViaTag({ via }: { via: "soniox" | "google" }) {
   return (
     <span
       title={VIA_HINT[via]}
-      className="inline-block align-middle rounded-full border border-gray-300 dark:border-white/40 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-white/80 whitespace-nowrap"
+      className="inline-block align-middle rounded-full border border-gray-300 dark:border-white/40 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-white whitespace-nowrap"
     >
       {via === "soniox" ? "Soniox" : "Google"}
     </span>
@@ -612,7 +618,7 @@ function LanguageChooser({
       <div className="max-w-xl w-full mx-auto flex flex-col h-full p-4 gap-3">
         <div className="flex items-center gap-1">
           {venue ? (
-            <p className="min-w-0 flex-1 truncate text-lg font-semibold text-gray-600 dark:text-white/80">{venue}</p>
+            <p className="min-w-0 flex-1 truncate text-lg font-semibold text-gray-600 dark:text-white">{venue}</p>
           ) : (
             <span className="flex-1" />
           )}
@@ -627,7 +633,7 @@ function LanguageChooser({
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Search"
           aria-label="Search languages"
-          className="w-full rounded-xl border-2 border-purple/30 dark:border-white/40 bg-transparent px-4 py-3 text-lg placeholder:text-gray-400 dark:placeholder:text-white/50"
+          className="w-full rounded-xl border-2 border-purple/30 dark:border-white/40 bg-transparent px-4 py-3 text-lg placeholder:text-gray-400 dark:placeholder:text-white/70"
         />
         {showOriginal && (
           <button
@@ -637,26 +643,26 @@ function LanguageChooser({
             }`}
           >
             <span className="block text-xl">Original</span>
-            <span className="block text-base text-gray-600 dark:text-white/70">Transcript of the words as spoken</span>
+            <span className="block text-base text-gray-600 dark:text-white/90">Transcript of the words as spoken</span>
           </button>
         )}
         {!languages && (
-          <p className="text-gray-500 dark:text-white/70">
+          <p className="text-gray-500 dark:text-white/90">
             {warming ? "Translation services are warming up. Languages will appear in a moment..." : "Loading languages..."}
           </p>
         )}
         {languages && warming && (
-          <p className="text-sm text-gray-500 dark:text-white/70">
+          <p className="text-sm text-gray-500 dark:text-white/90">
             More languages are still warming up and will appear here.
           </p>
         )}
         {mixed && !q && (
-          <p className="text-sm text-gray-500 dark:text-white/70">
+          <p className="text-sm text-gray-500 dark:text-white/90">
             <ViaTag via="soniox" /> appears word by word, with faster, more natural translation, and costs your venue
             less. <ViaTag via="google" /> appears after each pause. If your language has both, choose Soniox.
           </p>
         )}
-        {shown.length > 0 && <p className="text-sm font-semibold text-gray-500 dark:text-white/80">Languages</p>}
+        {shown.length > 0 && <p className="text-sm font-semibold text-gray-500 dark:text-white">Languages</p>}
         <ul className="flex-1 overflow-y-auto space-y-2">
           {shown.map((code) => (
             <li key={code}>

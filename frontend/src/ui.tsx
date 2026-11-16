@@ -4,10 +4,10 @@ import { siteRoot } from "./backend";
 type Variant = "primary" | "danger" | "secondary" | "ghost";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-purple text-white border-2 border-gray-400 hover:bg-midnight disabled:opacity-40 dark:border-white/40",
-  danger: "bg-red-700 text-white border-2 border-gray-400 hover:bg-red-800 dark:border-white/40",
+  primary: "bg-purple text-white border-2 border-transparent hover:bg-midnight disabled:opacity-40 dark:border-white/40",
+  danger: "bg-red-700 text-white border-2 border-transparent hover:bg-red-800 dark:border-white/40",
   secondary: "bg-white text-midnight border-2 border-purple/30 hover:bg-veil dark:bg-white/10 dark:text-white dark:border-white/40 dark:hover:bg-white/15",
-  ghost: "text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200",
+  ghost: "text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100",
 };
 
 export function Button({

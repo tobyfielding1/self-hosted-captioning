@@ -139,7 +139,7 @@ function SonioxInfo({ href, text }: { href: string; text: string }) {
       rel="noreferrer"
       aria-label={text}
       title={text}
-      className="inline-flex text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200"
+      className="inline-flex text-blue-600 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100"
     >
       <svg viewBox="0 0 16 16" className="h-4 w-4" fill="currentColor" aria-hidden="true">
         <path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM7.25 4.75a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0zM7 7h1.5v4.5H7V7z" />
@@ -613,7 +613,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
         <p className="text-3xl font-bold" aria-live="polite">
           {headline}
         </p>
-        {live && conn === "live" && stats?.testing && <p className="text-purple">Test captions running for a minute.</p>}
+        {live && conn === "live" && stats?.testing && <p className="text-purple dark:text-leaf">Test captions running for a minute.</p>}
         {live && stats?.endsInS !== undefined && <p>Stops automatically in {clock(stats.endsInS)}.</p>}
         {!live && sessionShown !== null && (
           <p>Each session stops automatically after {clock(Math.round(sessionShown * 60))}. Press Start again to carry on.</p>
@@ -654,7 +654,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
           <p>
             Keep this tab open.{" "}
             {wakeLockSupported() ? (wakeLock ? "The screen will stay on." : "") : "Turn off sleep on this device."}{" "}
-            <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200" href={listenerLink()} target="_blank" rel="noreferrer">
+            <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100" href={listenerLink()} target="_blank" rel="noreferrer">
               Open the audience view
             </a>
           </p>
@@ -662,12 +662,12 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
 
         {preview && (preview.lines.length > 0 || preview.current || preview.partial) && (
           <div className="rounded-xl bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/15 p-3 text-lg leading-snug">
-            <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 dark:text-gray-300 mb-1">What people are reading</p>
+            <p className="text-sm font-semibold text-gray-500 dark:text-white/90 mb-1">What people are reading</p>
             {preview.lines.map((l, i) => (
               <p key={i}>{l}</p>
             ))}
             <p>
-              {preview.current} <span className="text-gray-400 dark:text-gray-300">{preview.partial}</span>
+              {preview.current} <span className="text-gray-400 dark:text-white/90">{preview.partial}</span>
             </p>
           </div>
         )}
@@ -706,13 +706,13 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
               }}
             />
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-300">
+          <p className="text-sm text-gray-600 dark:text-white/90">
             Audio keeps going for a moment after speech stops, so the last words are still sent. That applies straight away.
           </p>
         </div>
         <div className="space-y-3">
           <p className="font-semibold">Caption pauses (Soniox)</p>
-          <p className="text-sm text-gray-600 dark:text-gray-300">
+          <p className="text-sm text-gray-600 dark:text-white/90">
             How readily a pause starts a new line. Applies on the next stream while this desk is live. Stored in this
             browser.
           </p>
@@ -817,7 +817,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
                 text="Tells Soniox what to expect: the kind of event, and the names and special words that come up."
               />
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
+            <p className="text-sm text-gray-600 dark:text-white/90">
               The kind of event, and the names of people, places and special words that come up. Applies on the next
               stream while this desk is live. Stored in this browser.
               {context === null && contextDefault !== null
@@ -864,7 +864,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
             <label className="font-semibold" htmlFor="session-minutes">
               Session length (minutes)
             </label>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
+            <p className="text-sm text-gray-600 dark:text-white/90">
               Captions stop after this long, and you press Start to carry on. From 1 to {MAX_SESSION_MIN}. Applies to the
               session running now. Stored in this browser.
               {sessionMinutes === null ? " Using the length from the install." : ""}
@@ -905,7 +905,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
             </div>
           </div>
         )}
-        <p className="text-sm text-gray-600 dark:text-gray-300 break-all">
+        <p className="text-sm text-gray-600 dark:text-white/90 break-all">
           Server: {backend}
           {status && ` (version ${status.version})`}
         </p>
@@ -927,11 +927,11 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
             <dt className="font-semibold">It says "out of credit"</dt>
             <dd>
               Top up under{" "}
-              <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200" href="https://console.soniox.com/org/billing/reports" target="_blank" rel="noreferrer">
+              <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100" href="https://console.soniox.com/org/billing/reports" target="_blank" rel="noreferrer">
                 Billing
               </a>
               . Turn on "Enable autopay" under{" "}
-              <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200" href="https://console.soniox.com/org/billing/payment-setup" target="_blank" rel="noreferrer">
+              <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100" href="https://console.soniox.com/org/billing/payment-setup" target="_blank" rel="noreferrer">
                 Payment setup
               </a>{" "}
               so this doesn't happen again.
@@ -949,7 +949,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
               </Button>
               , then{" "}
               <a
-                className="underline text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200"
+                className="underline text-blue-600 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100"
                 href={`${REPO}/issues/new`}
                 target="_blank"
                 rel="noreferrer"
@@ -994,12 +994,12 @@ function Intro() {
       <Card title="Try it">
         <p>
           Open the{" "}
-          <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200" href={DEMO_DESK_URL}>
+          <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100" href={DEMO_DESK_URL}>
             demo sound desk
           </a>
           , press Start and speak. Open the audience link it shows on your phone to read along.
         </p>
-        <p className="text-gray-600 dark:text-gray-300">
+        <p className="text-gray-600 dark:text-white/90">
           Only one person can record at a time: starting takes over from whoever is using it. Demo recordings stop after
           5 minutes; press Start again to continue.
         </p>
@@ -1035,14 +1035,14 @@ function Intro() {
           href={INSTALL_URL}
           target="_blank"
           rel="noreferrer"
-          className="inline-block bg-purple hover:bg-midnight text-white text-lg font-semibold px-8 py-5 rounded-2xl border-2 border-gray-400 dark:border-white/40"
+          className="inline-block bg-purple hover:bg-midnight text-white text-lg font-semibold px-8 py-5 rounded-2xl border-2 border-transparent dark:border-white/40"
         >
           Set up live captions
         </a>
-        <p className="text-gray-600 dark:text-gray-300">
+        <p className="text-gray-600 dark:text-white/90">
           If you end up in a blank terminal, click Set up live captions again.
         </p>
-        <p className="text-gray-600 dark:text-gray-300">
+        <p className="text-gray-600 dark:text-white/90">
           Already set up? Open your sound desk link. Lost it, or updating? Open the setup again and sign in with the
           Google account that set this venue up, or with another account that can manage that same Google Cloud project.
           An account without that access will not see the venue.
@@ -1064,7 +1064,7 @@ function LanguageList({ summary, targets }: { summary: string; targets: Language
   return (
     <details>
       <summary className="cursor-pointer font-semibold">{summary}</summary>
-      <p className="pt-2 text-sm text-gray-600 dark:text-gray-300">{names.join(", ")}</p>
+      <p className="pt-2 text-sm text-gray-600 dark:text-white/90">{names.join(", ")}</p>
     </details>
   );
 }
@@ -1132,16 +1132,16 @@ function LanguagesCard() {
         <summary className="cursor-pointer font-semibold">Today's languages, from the demo server</summary>
         <div className="pt-2 space-y-2">
           {languages === undefined && (
-            <p className="text-sm text-gray-600 dark:text-gray-300">Asking the demo server. It can take a few seconds to wake up...</p>
+            <p className="text-sm text-gray-600 dark:text-white/90">Asking the demo server. It can take a few seconds to wake up...</p>
           )}
           {languages === null && (
-            <p className="text-sm text-gray-600 dark:text-gray-300">The demo server didn't answer. The lists above are the providers' own.</p>
+            <p className="text-sm text-gray-600 dark:text-white/90">The demo server didn't answer. The lists above are the providers' own.</p>
           )}
           {warming && !waitedOut && (
-            <p className="text-sm text-gray-600 dark:text-gray-300">Google's languages are still warming up on the demo server.</p>
+            <p className="text-sm text-gray-600 dark:text-white/90">Google's languages are still warming up on the demo server.</p>
           )}
           {waitedOut && (
-            <p className="text-sm text-gray-600 dark:text-gray-300">
+            <p className="text-sm text-gray-600 dark:text-white/90">
               Google's languages didn't load on the demo this time. Soniox's list is below; the provider link above has
               Google's full set.
             </p>
@@ -1255,7 +1255,7 @@ function CostCard() {
         <p className="font-semibold">
           Example: 6 hours a month, translated into 1 language by Soniox — about US{usd(small)} a month
         </p>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
+        <p className="text-sm text-gray-600 dark:text-white/90">
           Soniox: 6 hours at about {usd(p.sonioxTranslatedHour)} an hour = {usd(smallHours * p.sonioxTranslatedHour)}.
           Cloud Run egress: one stream of 16 kHz audio to Soniox, about {giBs(smallEgressGiB)} GiB at{" "}
           {usd(p.egressPerGiB)}/GiB = {usd(smallEgress)}.
@@ -1266,7 +1266,7 @@ function CostCard() {
           Example: 18 hours a month, 3 Soniox languages, 1 Google Translate language and spoken captions in 1
           language — about US{usd(mid)} a month
         </p>
-        <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-gray-300 space-y-1">
+        <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-white/90 space-y-1">
           <li>
             Soniox: 3 languages × 18 hours at about {usd(p.sonioxTranslatedHour)} = {usd(midSoniox)}, plus the transcript
             Google translates from, 18 hours at {usd(p.sonioxHour)} = {usd(midTranscript)}.
@@ -1291,7 +1291,7 @@ function CostCard() {
           Example: 30 hours a month, 5 Soniox languages, 2 Google Translate languages and spoken captions in 2
           languages — about US{usd(large)} a month
         </p>
-        <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-gray-300 space-y-1">
+        <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-white/90 space-y-1">
           <li>
             Soniox: 5 languages × 30 hours at about {usd(p.sonioxTranslatedHour)} = {usd(sonioxLanguages)}, plus the
             transcript Google translates from, 30 hours at {usd(p.sonioxHour)} = {usd(transcript)}.
@@ -1312,7 +1312,7 @@ function CostCard() {
           </li>
         </ul>
       </div>
-      <p className="text-sm text-gray-600 dark:text-gray-300">
+      <p className="text-sm text-gray-600 dark:text-white/90">
         In US dollars. The examples assume 30 hours of speech is about 1 million characters. Soniox's translated hour
         is estimated from its token prices. Quiet audio isn't sent, so real egress is often lower.{" "}
         {live
@@ -1337,7 +1337,7 @@ function CostCard() {
           >
             {asking ? "Asking the demo server..." : "Use today's Google prices"}
           </Button>
-          {live === null && <span className="text-sm text-gray-600 dark:text-gray-300">The demo server hasn't read them yet.</span>}
+          {live === null && <span className="text-sm text-gray-600 dark:text-white/90">The demo server hasn't read them yet.</span>}
         </div>
       )}
     </Card>
@@ -1399,7 +1399,7 @@ function Finished({
       <Details summary="Share" open={open}>
         <h3 className="font-semibold text-midnight dark:text-white">Sound desk link</h3>
         <p>This page is the sound desk link. Bookmark it as "Captions" and keep it private.</p>
-        <p className="text-sm break-all text-gray-600 dark:text-gray-300">{speak}</p>
+        <p className="text-sm break-all text-gray-600 dark:text-white/90">{speak}</p>
         <div className="flex flex-wrap gap-3">
           <Button onClick={() => copy("speak", speak)}>{copied === "speak" ? "Copied" : "Copy link"}</Button>
           <a href={mailto} className="bg-white border-2 border-purple/30 rounded-xl px-4 py-2.5 font-semibold hover:bg-veil dark:bg-white/10 dark:border-white/20 dark:hover:bg-white/15">
@@ -1416,7 +1416,7 @@ function Finished({
             {copied === "listen" ? "Copied" : "Copy audience link"}
           </Button>
         </div>
-        <a className="inline-block underline text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200" href={listen} target="_blank" rel="noreferrer">
+        <a className="inline-block underline text-blue-600 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100" href={listen} target="_blank" rel="noreferrer">
           Open the audience view
         </a>
         <h3 className="font-semibold text-midnight dark:text-white pt-3">Other venues</h3>
@@ -1476,7 +1476,7 @@ function Notices({ status }: { status: Status | null | undefined }) {
           <p>
             Your venue is closer to Soniox's {status.sonioxFasterRegion.toUpperCase()} region. At console.soniox.com,
             request access to that region, create a project in it, and make an API key there. Then{" "}
-            <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200" href={NEWKEY_URL} target="_blank" rel="noreferrer">
+            <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100" href={NEWKEY_URL} target="_blank" rel="noreferrer">
               rotate the Soniox key
             </a>{" "}
             and paste that key when asked.
@@ -1491,7 +1491,7 @@ function UpdateBanner({ tone, children }: { tone: "error" | "warn" | "blue"; chi
   return (
     <Banner tone={tone}>
       {children}{" "}
-      <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200" href={INSTALL_URL} target="_blank" rel="noreferrer">
+      <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100" href={INSTALL_URL} target="_blank" rel="noreferrer">
         Run the install again
       </a>
       . Sign in with the Google account that set this venue up, or with another account that can manage that same Google Cloud project. Your links and QR code stay the same.
@@ -1501,7 +1501,7 @@ function UpdateBanner({ tone, children }: { tone: "error" | "warn" | "blue"; chi
 
 function ExtLink({ href, children }: { href: string; children: string }) {
   return (
-    <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200" href={href} target="_blank" rel="noreferrer">
+    <a className="underline text-blue-600 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100" href={href} target="_blank" rel="noreferrer">
       {children}
     </a>
   );
@@ -1551,11 +1551,11 @@ function Spending({ status, backend, token }: { status: Status | null | undefine
       </p>
       <div>
         <p className="font-semibold">Soniox</p>
-        {spend === undefined && <p className="text-sm text-gray-600 dark:text-gray-300">Asking Soniox what this venue has spent...</p>}
+        {spend === undefined && <p className="text-sm text-gray-600 dark:text-white/90">Asking Soniox what this venue has spent...</p>}
         {spend === null && (
-          <p className="text-sm text-gray-600 dark:text-gray-300">This server can't show spending yet. It will after its next update.</p>
+          <p className="text-sm text-gray-600 dark:text-white/90">This server can't show spending yet. It will after its next update.</p>
         )}
-        {spend?.sonioxError && <p className="text-sm text-gray-600 dark:text-gray-300">{spend.sonioxError}</p>}
+        {spend?.sonioxError && <p className="text-sm text-gray-600 dark:text-white/90">{spend.sonioxError}</p>}
         {soniox && (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
             <dt>{monthName(soniox.thisMonth)} so far</dt>
@@ -1564,7 +1564,7 @@ function Spending({ status, backend, token }: { status: Status | null | undefine
             <dd className="font-semibold">{usd(soniox.lastMonthUsd)}</dd>
           </dl>
         )}
-        <p className="text-sm text-gray-600 dark:text-gray-300">
+        <p className="text-sm text-gray-600 dark:text-white/90">
           Soniox's prices as of {PRICES_AS_OF}: about {usd(DATED_PRICES.sonioxHour)} an hour for the transcript and{" "}
           {usd(DATED_PRICES.sonioxTranslatedHour)} for each translated language, while someone is reading it.
         </p>
@@ -1579,7 +1579,7 @@ function Spending({ status, backend, token }: { status: Status | null | undefine
       </div>
       <div>
         <p className="font-semibold">Google Cloud</p>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
+        <p className="text-sm text-gray-600 dark:text-white/90">
           Google doesn't let the server read what has been spent, so open the report below.
           {google?.translatePerMillion != null &&
             ` Google Translate today: the first 500,000 characters a month free, then ${usd(google.translatePerMillion)} per million.`}
@@ -1670,7 +1670,7 @@ function Delete({ status }: { status: Status | null | undefined }) {
         href={DELETE_URL}
         target="_blank"
         rel="noreferrer"
-        className="inline-block bg-red-700 hover:bg-red-800 text-white font-semibold px-4 py-2.5 rounded-xl border-2 border-gray-400 dark:border-white/40"
+        className="inline-block bg-red-700 hover:bg-red-800 text-white font-semibold px-4 py-2.5 rounded-xl border-2 border-transparent dark:border-white/40"
       >
         Delete from Google Cloud
       </a>
