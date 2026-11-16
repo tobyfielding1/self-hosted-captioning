@@ -987,7 +987,9 @@ function Intro() {
         </div>
       </div>
       <p className="text-lg">
-        Self-hosted captioning allows a venue to host a translation server on Google Cloud so the audience can read what is being spoken on their mobile devices in their own language. Self-hosting makes it extremely low cost for the venue.
+        Live captions and translation for one venue at a time. The venue's own Google Cloud account runs a small
+        server, and the audience reads on their phones in the language they pick. Hosting it yourselves keeps the cost
+        low.
       </p>
       <Card title="Try it">
         <p>
@@ -999,7 +1001,7 @@ function Intro() {
         </p>
         <p className="text-gray-600 dark:text-gray-300">
           Only one person can record at a time: starting takes over from whoever is using it. Demo recordings stop after
-          5 minutes and have to be started again.
+          5 minutes; press Start again to continue.
         </p>
       </Card>
       <LanguagesCard />
@@ -1010,25 +1012,24 @@ function Intro() {
       <Card title="Venue team">
         <p>
           Open your sound desk link, check the level bar moves when someone speaks, and press Start. Everyone else
-          scans a QR code with their phone camera, picks a language, and reads.
-        </p>
-        <p>
-          The words appear as they are spoken, in the language each person picked.
+          scans a QR code with their phone camera, picks a language, and reads as the words appear.
         </p>
         <p>Press Stop at the end. Devices can follow only while the sound desk is live.</p>
       </Card>
       <Card title="Set up once">
         <p>
-          It takes about 15 minutes on your Google account. Each venue gets its own server, a private sound desk link, and a QR
-          code that stays the same. The terminal lists any venues already on this account.
+          It takes about 15 minutes on your Google account. Each venue gets its own server, a private sound desk link,
+          and a QR code that stays the same. The terminal lists any venues already on this account.
         </p>
         <p>
           Google Cloud hosts the server. CPU and memory for normal use stay in the free tier; a little egress is
-          charged for audio leaving the server. Google still asks for a card, and the install emails you if this
-          venue passes £5 a month. Captions and translations come from Soniox, with Google Translate and spoken
-          captions as options the install asks about. You choose how much Soniox credit to add, and it is only used
-          while someone is being captioned: quiet audio isn't sent, and a language runs only while someone is reading
-          it. See Cost above for examples.
+          charged for audio leaving the server. Google still asks for a card, and the install emails you if this venue
+          passes £5 a month.
+        </p>
+        <p>
+          Captions and translations come from Soniox, with Google Translate and spoken captions as options the install
+          asks about. You choose how much Soniox credit to add. Credit is only used while someone is being captioned:
+          quiet audio isn't sent, and a language runs only while someone is reading it. See Cost above for examples.
         </p>
         <a
           href={INSTALL_URL}
@@ -1042,7 +1043,9 @@ function Intro() {
           If you end up in a blank terminal, click Set up live captions again.
         </p>
         <p className="text-gray-600 dark:text-gray-300">
-          Already set up? Open your sound desk link. Lost it, or updating? Open the setup again and sign in with the Google account that set this venue up, or with another account that can manage that same Google Cloud project. An account without that access will not see the venue.
+          Already set up? Open your sound desk link. Lost it, or updating? Open the setup again and sign in with the
+          Google account that set this venue up, or with another account that can manage that same Google Cloud project.
+          An account without that access will not see the venue.
         </p>
       </Card>
     </>
