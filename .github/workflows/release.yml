@@ -196,14 +196,20 @@ jobs:
             TITLE="Backend + site (dev)"
             NOTES="Dev venue servers (UPDATE_URL → this release) and the /dev/ site. FE and BE are the same commit. Updated on every push to main."
           fi
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" \
-            --title "$TITLE" --latest=false --notes "$NOTES"
           {
             echo "$NOTES"
             echo
             echo "Commit: \`$SHA\` (\`$SHORT\`)."
           } > /tmp/notes.md
-          gh release edit "$TAG" --notes-file /tmp/notes.md
+          # Move the mutable tag to this commit. Cloud Shell opens these tags for setup.sh;
+          # uploading assets alone left the tag on an old SHA.
+          git tag -f "$TAG" "$SHA"
+          git push -f origin "refs/tags/$TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes-file /tmp/notes.md --target "$SHA"
+          else
+            gh release create "$TAG" --target "$SHA" --title "$TITLE" --latest=false --notes-file /tmp/notes.md
+          fi
           gh release upload "$TAG" server.mjs server.mjs.sha256 site.tar.gz --clobber
           echo "Published $TAG from $SHORT" >> "$GITHUB_STEP_SUMMARY"
 

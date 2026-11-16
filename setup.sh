@@ -12,7 +12,6 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP_URL="https://tobyfielding1.github.io/self-hosted-captioning/"
 SERVICE="captioning"
 LABEL="app=captioning"
 
@@ -25,6 +24,7 @@ Installs or updates a venue's captioning backend on Google Cloud Run.
   ./setup.sh --new-key       replace the Soniox key
   ./setup.sh --rotate-token  issue a new sound desk link (the old one stops working)
   ./setup.sh --reselect      support use: pick the Cloud Run region again
+  CHANNEL=dev ./setup.sh     /dev/ site + backend-dev release (from the /dev/ website)
   REGION=europe-west2 ./setup.sh   support use: force a region
   ./setup.sh --help          show this help
 EOF
@@ -45,6 +45,37 @@ if $NEW_PROJECT && $ROTATE; then
   echo "Use either --new-project or --rotate-token."
   exit 2
 fi
+
+# Channel: which public site the desk link opens, and which GitHub release the server pulls.
+# The captions website opens Cloud Shell on tag backend-dev (/dev/) or backend-latest (live).
+# Prefer CHANNEL=dev|prod from the tutorial; otherwise infer from tags on HEAD.
+SITE_ROOT="https://tobyfielding1.github.io/self-hosted-captioning"
+RELEASE_BASE="https://github.com/tobyfielding1/self-hosted-captioning/releases/download"
+if [ -z "${CHANNEL:-}" ]; then
+  tags="$(git tag --points-at HEAD 2>/dev/null || true)"
+  if printf '%s\n' "$tags" | grep -qx backend-dev && ! printf '%s\n' "$tags" | grep -qx backend-latest; then
+    CHANNEL=dev
+  else
+    CHANNEL=prod
+  fi
+fi
+case "$CHANNEL" in
+  dev)
+    APP_URL="${SITE_ROOT}/dev/"
+    UPDATE_URL="${RELEASE_BASE}/backend-dev"
+    ;;
+  prod)
+    APP_URL="${SITE_ROOT}/"
+    UPDATE_URL="${RELEASE_BASE}/backend-latest"
+    ;;
+  *)
+    echo "CHANNEL must be dev or prod (got: ${CHANNEL})"
+    exit 2
+    ;;
+esac
+AGAIN="./setup.sh"
+[ "$CHANNEL" = "dev" ] && AGAIN="CHANNEL=dev ./setup.sh"
+
 
 # gcloud must never stop to ask a question: its output is hidden, so a prompt would look like a hang.
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
@@ -99,7 +130,7 @@ fail() {
   printf '\n\033[1;31m%s\033[0m\n' "$1"
   [ -n "${2:-}" ] && printf '%s\n' "$2"
   printf '\nDetails for your helper are saved in %s\n' "$LOG"
-  printf '\nWhen that is fixed, run this again:  ./setup.sh\n\n'
+  printf '\nWhen that is fixed, run this again:  %s\n\n' "$AGAIN"
   exit 1
 }
 STEP="starting"
@@ -108,6 +139,11 @@ trap 'fail "Something went wrong while ${STEP}." "Copy the text above and send i
 # --------------------------------------------------------------------------- project
 STEP="finding your Google Cloud project"
 bold "Setting up live captions"
+if [ "$CHANNEL" = "dev" ]; then
+  note "Channel: dev (desk link → /dev/, server pulls backend-dev)."
+else
+  note "Channel: live (desk link → public site, server pulls backend-latest)."
+fi
 spin "Checking your Google account"
 ACCOUNT="$(gcloud config get-value account 2>>"$LOG" || true)"
 spin_stop
@@ -357,7 +393,7 @@ if $ROTATE; then
   [ -n "$EXISTING_REGION" ] || fail "There's no captioning server on this Google account." "Install first, or sign in as the venue Google account that did."
   STEP="issuing a new sound desk link"
   spin "Issuing a new sound desk link"
-  gcloud run services update "$SERVICE" --region "$EXISTING_REGION" --update-env-vars="SPEAKER_TOKEN=${TOKEN},BILLING_ACCOUNT=${BILLING}" --quiet >/dev/null 2>>"$LOG" ||
+  gcloud run services update "$SERVICE" --region "$EXISTING_REGION" --update-env-vars="SPEAKER_TOKEN=${TOKEN},BILLING_ACCOUNT=${BILLING},UPDATE_URL=${UPDATE_URL}" --quiet >/dev/null 2>>"$LOG" ||
     fail "Couldn't update the captioning server." "Try this again, or run the install."
   URL="$(gcloud run services describe "$SERVICE" --region "$EXISTING_REGION" --format='value(status.url)' 2>>"$LOG")"
   bold "Done! The old sound desk link no longer works. Open this new one:"
@@ -460,7 +496,7 @@ background() {
       case "$context" in *"$c"*) ;; *) d="$c"; break ;; esac
     done
     if [ -z "$d" ]; then d="@"; context="${context//@/ }"; fi
-    local vars="SPEAKER_TOKEN=${TOKEN}${d}BILLING_ACCOUNT=${BILLING}${d}VENUE_NAME=${DISPLAY}${d}SETUP_VERSION=${setup_version}${d}MAX_SESSION_MIN=${MAX_SESSION_MIN}${d}GOOGLE_TRANSLATE=${GOOGLE_TRANSLATE}"
+    local vars="SPEAKER_TOKEN=${TOKEN}${d}BILLING_ACCOUNT=${BILLING}${d}VENUE_NAME=${DISPLAY}${d}SETUP_VERSION=${setup_version}${d}MAX_SESSION_MIN=${MAX_SESSION_MIN}${d}GOOGLE_TRANSLATE=${GOOGLE_TRANSLATE}${d}UPDATE_URL=${UPDATE_URL}"
     if [ -n "${SPOKEN:-}" ]; then vars+="${d}SPOKEN=1"; fi
     if [ -n "$context" ]; then vars+="${d}SONIOX_CONTEXT=${context}"; fi
     if gcloud run deploy "$SERVICE" \

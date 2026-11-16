@@ -63,13 +63,13 @@ A frontend-only fix does not get a protocol bump. Bumping only the page makes ev
 
 `backend/boot.mjs` and these environment variables must keep working for servers already installed:
 
-`PORT`, `SONIOX_API_KEY`, `SONIOX_REGION`, `SPEAKER_TOKEN`, `BILLING_ACCOUNT`, `AUTO_UPDATE`, `VENUE_NAME`, `SPOKEN`, `SETUP_VERSION`, `SONIOX_CONTEXT`, `MAX_SESSION_MIN`, `GOOGLE_TRANSLATE`
+`PORT`, `SONIOX_API_KEY`, `SONIOX_REGION`, `SPEAKER_TOKEN`, `BILLING_ACCOUNT`, `AUTO_UPDATE`, `UPDATE_URL`, `VENUE_NAME`, `SPOKEN`, `SETUP_VERSION`, `SONIOX_CONTEXT`, `MAX_SESSION_MIN`, `GOOGLE_TRANSLATE`
 
 `log.info` takes `Record<string, unknown>`. A typed object with no index signature does not count. Spread the fields. CI typechecks; a local test run does not.
 
 ## Cloud Shell tutorials
 
-Each tutorial is one Cloud Shell page: one `#` title and one `##` step. A second `##` becomes a Next button. `deploy.md` already covers a new venue and a re-run. Do not add a separate "another venue" tutorial.
+Each tutorial is one Cloud Shell page: one `#` title and one `##` step. A second `##` becomes a Next button. `deploy.md` already covers a new venue and a re-run. Do not add a separate "another venue" tutorial. The live site opens Cloud Shell on tag `backend-latest` with `deploy.md`; `/dev/` opens tag `backend-dev` with `deploy-dev.md` (`CHANNEL=dev`). `setup.sh` sets `APP_URL` and `UPDATE_URL` from the channel so the desk link and cold-start pull match that site. Each channel publish force-moves that git tag to the published commit so Cloud Shell clones current setup scripts, not a stale tag.
 
 `./setup.sh --help` lists the flags. Unknown flags must exit non-zero.
 
