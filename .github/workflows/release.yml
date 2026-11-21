@@ -246,7 +246,7 @@ jobs:
       # commit keeps the first artifact. Create a unique empty commit SHA for pages_build_version
       # (the API 404s on non-commit strings) and deploy with that.
       - id: deploy
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
           CHANNEL: ${{ needs.check.outputs.channel }}
