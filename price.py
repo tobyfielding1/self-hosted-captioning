@@ -4,7 +4,7 @@
 
 Without a token or a price, it links Google's pricing page instead.
 """
-import json, os, sys, urllib.parse, urllib.request
+import json, os, sys, time, urllib.error, urllib.parse, urllib.request
 from decimal import Decimal, ROUND_HALF_UP
 
 # About 30 hours of speech is a million characters.
@@ -55,9 +55,23 @@ def unit_price(price):
 
 
 def get(url, token):
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-    with urllib.request.urlopen(req, timeout=20) as res:
-        return json.load(res)
+    headers = {"Authorization": f"Bearer {token}"}
+    # A user token is charged to a project. The new venue's project is that project.
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT") or ""
+    if project:
+        headers["X-Goog-User-Project"] = project
+    delay = 2.0
+    for attempt in range(6):
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as res:
+                return json.load(res)
+        except urllib.error.HTTPError as err:
+            if err.code not in (429, 500, 502, 503, 504) or attempt == 5:
+                raise
+            err.close()
+            time.sleep(delay)
+            delay = min(delay * 2, 8)
 
 
 def pages(url, token, key):
@@ -73,10 +87,10 @@ def pages(url, token, key):
 
 def paragraph(product, token, currency):
     service = next(
-        s for s in pages("https://cloudbilling.googleapis.com/v1/services?pageSize=5000", token, "services")
+        s for s in pages("https://cloudbilling.googleapis.com/v1/services?pageSize=200", token, "services")
         if s.get("displayName") == product["service"]
     )
-    sku_url = f"https://cloudbilling.googleapis.com/v1/{service['name']}/skus?pageSize=5000&currencyCode={urllib.parse.quote(currency)}"
+    sku_url = f"https://cloudbilling.googleapis.com/v1/{service['name']}/skus?pageSize=200&currencyCode={urllib.parse.quote(currency)}"
     sku = next(s for s in pages(sku_url, token, "skus") if product["sku"](s.get("description", "").lower()))
     info = max(sku.get("pricingInfo") or [], key=lambda i: i.get("effectiveTime") or "")
     paid = next(r for r in info["pricingExpression"]["tieredRates"] if unit_price(r["unitPrice"]) > 0)
@@ -105,7 +119,8 @@ def main():
         if not token:
             raise RuntimeError("no token")
         print(paragraph(product, token, currency))
-    except Exception:
+    except Exception as err:
+        print(f"price read failed: {err}", file=sys.stderr)
         credit = f" The first {product['credit_chars']:,} characters each month are free." if product["credit_chars"] else ""
         print(f"{product['intro']} The current {product['name']} price is here: {product['link']}.{credit} {product['tail']}")
 

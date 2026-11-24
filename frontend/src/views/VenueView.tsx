@@ -24,9 +24,10 @@ const INSTALL_URL = shellUrl("deploy.md");
 const ROTATE_URL = shellUrl("rotate.md");
 const NEWKEY_URL = shellUrl("newkey.md");
 const DELETE_URL = shellUrl("delete.md");
-// Public on purpose: the demo venue. The home page also reads its live language list.
-const DEMO_HOST = "captioning-idhlw6p5ka-ew.a.run.app";
-const DEMO_DESK_URL = `#backend=${DEMO_HOST}&token=07400c4702ba8651da12b3225f88a031`;
+// Public on purpose: the demo venue for this site. /dev/ has its own server. The home page also reads its language list.
+const DEMO_HOST = SITE_CHANNEL === "dev" ? "captioning-6lwil4gjfq-ew.a.run.app" : "captioning-idhlw6p5ka-ew.a.run.app";
+const DEMO_TOKEN = SITE_CHANNEL === "dev" ? "14ee0a25b34206fd147f81ff8f143d0d" : "07400c4702ba8651da12b3225f88a031";
+const DEMO_DESK_URL = `#backend=${DEMO_HOST}&token=${DEMO_TOKEN}`;
 const LANGUAGE_DOCS = {
   soniox: "https://soniox.com/docs/stt/concepts/supported-languages",
   google: "https://docs.cloud.google.com/translate/docs/languages#nmt",

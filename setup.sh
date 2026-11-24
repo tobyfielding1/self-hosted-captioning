@@ -535,12 +535,22 @@ background() {
   done
 }
 # Prints a paragraph about an optional Google service, with its price read just now. See price.py.
+# The Cloud Billing API has to be on first. A new project reaches these questions before the
+# background setup turns it on, and without it the price read fails closed.
 explain_price() {
   local currency token paragraph
+  if [ -z "${BILLING_CATALOG:-}" ]; then
+    BILLING_CATALOG=1
+    if ! gcloud services list --enabled --project="$PROJECT" --filter="config.name=cloudbilling.googleapis.com" --format="value(config.name)" 2>>"$LOG" | grep -q cloudbilling; then
+      spin "Turning on Google's price list"
+      gcloud services enable cloudbilling.googleapis.com --project="$PROJECT" --quiet >>"$LOG" 2>&1 || true
+      spin_stop
+    fi
+  fi
   currency="$(gcloud billing accounts describe "$BILLING" --format='value(currencyCode)' 2>>"$LOG" || true)"
   token="$(gcloud auth print-access-token 2>>"$LOG" || true)"
   spin "Reading Google's current price"
-  paragraph="$(ACCESS_TOKEN="$token" python3 price.py "$1" "$currency" 2>>"$LOG")"
+  paragraph="$(GOOGLE_CLOUD_PROJECT="$PROJECT" ACCESS_TOKEN="$token" python3 price.py "$1" "$currency" 2>>"$LOG")"
   spin_stop
   printf '\n%s\n\n' "$paragraph" | fold -s -w 78
 }
