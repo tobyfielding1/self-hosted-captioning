@@ -54,6 +54,24 @@ def unit_price(price):
     return Decimal(price.get("units") or "0") + Decimal(price.get("nanos") or 0) / Decimal(1_000_000_000)
 
 
+# Enabling the Cloud Billing API returns before it answers. A new project hits that gap.
+NOT_READY_SECONDS = 180
+
+
+def body_of(err):
+    try:
+        return err.read().decode("utf-8", "replace")
+    finally:
+        err.close()
+
+
+def api_not_ready(status, body):
+    text = body.lower()
+    return status == 403 and (
+        "service_disabled" in text or "has not been used" in text or "enabled this api recently" in text
+    )
+
+
 def get(url, token):
     headers = {"Authorization": f"Bearer {token}"}
     # A user token is charged to a project. The new venue's project is that project.
@@ -61,17 +79,25 @@ def get(url, token):
     if project:
         headers["X-Goog-User-Project"] = project
     delay = 2.0
-    for attempt in range(6):
+    deadline = time.monotonic() + NOT_READY_SECONDS
+    flaky_left = 5
+    while True:
         req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=30) as res:
                 return json.load(res)
         except urllib.error.HTTPError as err:
-            if err.code not in (429, 500, 502, 503, 504) or attempt == 5:
-                raise
-            err.close()
-            time.sleep(delay)
-            delay = min(delay * 2, 8)
+            detail = body_of(err)
+            if api_not_ready(err.code, detail) and time.monotonic() < deadline:
+                print("price list is not answering yet", file=sys.stderr)
+                time.sleep(5)
+                continue
+            if err.code in (429, 500, 502, 503, 504) and flaky_left:
+                flaky_left -= 1
+                time.sleep(delay)
+                delay = min(delay * 2, 8)
+                continue
+            raise RuntimeError(f"HTTP {err.code}: {detail[:300]}") from None
 
 
 def pages(url, token, key):
