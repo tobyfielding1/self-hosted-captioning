@@ -630,14 +630,9 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
 
         <div className="flex flex-wrap gap-3">
           {!live ? (
-            <>
-              <Button big disabled={mic !== "on" || speech !== "ready"} onClick={() => start()}>
-                Start
-              </Button>
-              <Button big variant="secondary" disabled={mic !== "on" || speech !== "ready"} onClick={() => start(true)}>
-                Test captions
-              </Button>
-            </>
+            <Button big disabled={mic !== "on" || speech !== "ready"} onClick={() => start()}>
+              Start
+            </Button>
           ) : (
             <>
               <Button big variant="danger" onClick={stop}>
