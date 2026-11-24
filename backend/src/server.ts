@@ -17,7 +17,7 @@ const VERSION = typeof __VERSION__ === "string" ? __VERSION__ : "dev";
 export const PROTOCOL = 4;
 export const PROTOCOL_VERSION = "4.6.0";
 // SETUP_VERSION is the install. setup.sh records it, including the Node image it selects. A cold start does not. Bump minor for a new question or a new Node major, patch for a security fix that needs the install, major when an old install cannot be trusted.
-export const SETUP_VERSION = "1.3.0";
+export const SETUP_VERSION = "1.4.0";
 
 function recordedSetup(): string | undefined {
   const recorded = process.env.SETUP_VERSION ?? "";

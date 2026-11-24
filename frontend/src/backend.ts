@@ -3,8 +3,8 @@ export const ORIGINAL = "original";
 export const PROTOCOL_VERSION = "4.6.0";
 /** Installs that have never recorded a setup version. */
 export const SETUP_BASELINE = "1.0.0";
-/** The install a venue needs. This one asks about Google Translate, spoken captions, the context for Soniox, and the session length. */
-export const SETUP_VERSION = "1.3.0";
+/** The install a venue needs. This one builds the server on Node 26. */
+export const SETUP_VERSION = "1.4.0";
 
 export interface ProtocolVersion {
   major: number;

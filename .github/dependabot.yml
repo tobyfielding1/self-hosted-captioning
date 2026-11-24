@@ -8,7 +8,7 @@ updates:
       backend:
         patterns: ["*"]
     ignore:
-      # Types must match the Node 24 runtime the install requests (nodejs24).
+      # Types must match the Node 26 runtime the install requests (nodejs26).
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
   - package-ecosystem: npm

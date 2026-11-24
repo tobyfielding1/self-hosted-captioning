@@ -44,7 +44,8 @@ describe("setup version", () => {
     expect(setupNotice("1.0.0")).toBe("minor");
     expect(setupNotice("1.1.0")).toBe("minor");
     expect(setupNotice("1.2.0")).toBe("minor");
-    expect(setupNotice("1.3.0")).toBeNull();
+    expect(setupNotice("1.3.0")).toBe("minor");
+    expect(setupNotice("1.4.0")).toBeNull();
     expect(setupNotice("nope")).toBe("minor");
     expect(setupNotice("1.1.0", "1.1.1")).toBe("patch");
     expect(setupNotice("1.1.0", "2.0.0")).toBe("major");
