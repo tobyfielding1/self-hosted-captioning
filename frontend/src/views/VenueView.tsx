@@ -1302,95 +1302,100 @@ function CostCard() {
         not a quote for your venue. Cloud Run CPU and memory for these stay inside Google's free allowance; egress is
         charged for audio leaving the server.
       </p>
-      <div className="space-y-1">
-        <p className="font-semibold">
-          Example: 6 hours a month, translated into 1 language by Soniox — about US{usd(small)} a month
-        </p>
-        <p className="text-sm text-gray-600 dark:text-white/90">
-          Soniox: 6 hours at about {usd(p.sonioxTranslatedHour)} an hour = {usd(smallHours * p.sonioxTranslatedHour)}.
-          Cloud Run egress: one stream of 16 kHz audio to Soniox, about {giBs(smallEgressGiB)} GiB at{" "}
-          {usd(p.egressPerGiB)}/GiB = {usd(smallEgress)}.
-        </p>
-      </div>
-      <div className="space-y-1">
-        <p className="font-semibold">
-          Example: 18 hours a month, 3 Soniox languages, 1 Google Translate language and spoken captions in 1
-          language — about US{usd(mid)} a month
-        </p>
-        <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-white/90 space-y-1">
-          <li>
-            Soniox: 3 languages × 18 hours at about {usd(p.sonioxTranslatedHour)} = {usd(midSoniox)}, plus the transcript
-            Google translates from, 18 hours at {usd(p.sonioxHour)} = {usd(midTranscript)}.
-          </li>
-          <li>
-            Google Translate: 1 language × {millions(midChars)} characters. The first {millions(p.translateFreeChars)} a
-            month are free, then {usd(p.translatePerMillion)} per million = {usd(midTranslate)}.
-          </li>
-          <li>
-            Spoken captions: 1 language × {millions(midChars)} characters. The first {millions(p.speechFreeChars)} a month
-            are free, then {usd(p.speechPerMillion)} per million = {usd(midSpeech)}.
-          </li>
-          <li>
-            Cloud Run: 18 hours stays inside the free CPU and memory allowance
-            {cloudRunFree(midHours) ? ` (${usd(0)})` : ""}. Egress: about {giBs(midEgressGiB)} GiB at{" "}
-            {usd(p.egressPerGiB)}/GiB = {usd(midEgress)}.
-          </li>
-        </ul>
-      </div>
-      <div className="space-y-1">
-        <p className="font-semibold">
-          Example: 30 hours a month, 5 Soniox languages, 2 Google Translate languages and spoken captions in 2
-          languages — about US{usd(large)} a month
-        </p>
-        <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-white/90 space-y-1">
-          <li>
-            Soniox: 5 languages × 30 hours at about {usd(p.sonioxTranslatedHour)} = {usd(sonioxLanguages)}, plus the
-            transcript Google translates from, 30 hours at {usd(p.sonioxHour)} = {usd(transcript)}.
-          </li>
-          <li>
-            Google Translate: 2 languages × 1 million characters. The first {millions(p.translateFreeChars)} a month are
-            free, then {usd(p.translatePerMillion)} per million = {usd(translate)}.
-          </li>
-          <li>
-            Spoken captions: 2 languages × 1 million characters. The first {millions(p.speechFreeChars)} a month are free,
-            then {usd(p.speechPerMillion)} per million = {usd(speech)}. Two listeners in the same language share one voice.
-          </li>
-          <li>
-            Cloud Run: 30 hours on one 1 vCPU / 512 MiB instance stays inside the free CPU and memory allowance
-            {cloudRunFree(hours) ? ` (${usd(0)})` : ""}. Egress is audio to Soniox ({largeSonioxStreams} streams) and
-            spoken captions to phones ({largeSpokenStreams} languages at 32 kbps): about {giBs(largeEgressGiB)} GiB at{" "}
-            {usd(p.egressPerGiB)}/GiB = {usd(largeEgress)}.
-          </li>
-        </ul>
-      </div>
-      <p className="text-sm text-gray-600 dark:text-white/90">
-        In US dollars. The examples assume 30 hours of speech is about 1 million characters. Soniox's translated hour
-        is estimated from its token prices. Quiet audio isn't sent, so real egress is often lower.{" "}
-        {live
-          ? `Google Translate and Chirp prices were read from Google today by the demo server; Soniox and Cloud Run egress are from ${PRICES_AS_OF}.`
-          : `Prices as of ${PRICES_AS_OF}, and they change.`}{" "}
-        Current prices: <ExtLink href={PRICING.soniox}>Soniox</ExtLink>,{" "}
-        <ExtLink href={PRICING.google}>Google Translate</ExtLink>, <ExtLink href={PRICING.chirp}>Chirp 3 HD</ExtLink>,{" "}
-        <ExtLink href="https://cloud.google.com/run/pricing">Cloud Run</ExtLink>.
-      </p>
-      {!live && (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="ghost"
-            disabled={asking}
-            onClick={() => {
-              setAsking(true);
-              void getPrices(`https://${DEMO_HOST}`).then((prices) => {
-                setLive(prices);
-                setAsking(false);
-              });
-            }}
-          >
-            {asking ? "Asking the demo server..." : "Use today's Google prices"}
-          </Button>
-          {live === null && <span className="text-sm text-gray-600 dark:text-white/90">The demo server hasn't read them yet.</span>}
+      <details>
+        <summary className="cursor-pointer font-semibold">Example costings</summary>
+        <div className="pt-2 space-y-3">
+          <div className="space-y-1">
+            <p className="font-semibold">
+              Example: 6 hours a month, translated into 1 language by Soniox — about US{usd(small)} a month
+            </p>
+            <p className="text-sm text-gray-600 dark:text-white/90">
+              Soniox: 6 hours at about {usd(p.sonioxTranslatedHour)} an hour = {usd(smallHours * p.sonioxTranslatedHour)}.
+              Cloud Run egress: one stream of 16 kHz audio to Soniox, about {giBs(smallEgressGiB)} GiB at{" "}
+              {usd(p.egressPerGiB)}/GiB = {usd(smallEgress)}.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold">
+              Example: 18 hours a month, 3 Soniox languages, 1 Google Translate language and spoken captions in 1
+              language — about US{usd(mid)} a month
+            </p>
+            <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-white/90 space-y-1">
+              <li>
+                Soniox: 3 languages × 18 hours at about {usd(p.sonioxTranslatedHour)} = {usd(midSoniox)}, plus the transcript
+                Google translates from, 18 hours at {usd(p.sonioxHour)} = {usd(midTranscript)}.
+              </li>
+              <li>
+                Google Translate: 1 language × {millions(midChars)} characters. The first {millions(p.translateFreeChars)} a
+                month are free, then {usd(p.translatePerMillion)} per million = {usd(midTranslate)}.
+              </li>
+              <li>
+                Spoken captions: 1 language × {millions(midChars)} characters. The first {millions(p.speechFreeChars)} a month
+                are free, then {usd(p.speechPerMillion)} per million = {usd(midSpeech)}.
+              </li>
+              <li>
+                Cloud Run: 18 hours stays inside the free CPU and memory allowance
+                {cloudRunFree(midHours) ? ` (${usd(0)})` : ""}. Egress: about {giBs(midEgressGiB)} GiB at{" "}
+                {usd(p.egressPerGiB)}/GiB = {usd(midEgress)}.
+              </li>
+            </ul>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold">
+              Example: 30 hours a month, 5 Soniox languages, 2 Google Translate languages and spoken captions in 2
+              languages — about US{usd(large)} a month
+            </p>
+            <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-white/90 space-y-1">
+              <li>
+                Soniox: 5 languages × 30 hours at about {usd(p.sonioxTranslatedHour)} = {usd(sonioxLanguages)}, plus the
+                transcript Google translates from, 30 hours at {usd(p.sonioxHour)} = {usd(transcript)}.
+              </li>
+              <li>
+                Google Translate: 2 languages × 1 million characters. The first {millions(p.translateFreeChars)} a month are
+                free, then {usd(p.translatePerMillion)} per million = {usd(translate)}.
+              </li>
+              <li>
+                Spoken captions: 2 languages × 1 million characters. The first {millions(p.speechFreeChars)} a month are free,
+                then {usd(p.speechPerMillion)} per million = {usd(speech)}. Two listeners in the same language share one voice.
+              </li>
+              <li>
+                Cloud Run: 30 hours on one 1 vCPU / 512 MiB instance stays inside the free CPU and memory allowance
+                {cloudRunFree(hours) ? ` (${usd(0)})` : ""}. Egress is audio to Soniox ({largeSonioxStreams} streams) and
+                spoken captions to phones ({largeSpokenStreams} languages at 32 kbps): about {giBs(largeEgressGiB)} GiB at{" "}
+                {usd(p.egressPerGiB)}/GiB = {usd(largeEgress)}.
+              </li>
+            </ul>
+          </div>
+          <p className="text-sm text-gray-600 dark:text-white/90">
+            In US dollars. The examples assume 30 hours of speech is about 1 million characters. Soniox's translated hour
+            is estimated from its token prices. Quiet audio isn't sent, so real egress is often lower.{" "}
+            {live
+              ? `Google Translate and Chirp prices were read from Google today by the demo server; Soniox and Cloud Run egress are from ${PRICES_AS_OF}.`
+              : `Prices as of ${PRICES_AS_OF}, and they change.`}{" "}
+            Current prices: <ExtLink href={PRICING.soniox}>Soniox</ExtLink>,{" "}
+            <ExtLink href={PRICING.google}>Google Translate</ExtLink>, <ExtLink href={PRICING.chirp}>Chirp 3 HD</ExtLink>,{" "}
+            <ExtLink href="https://cloud.google.com/run/pricing">Cloud Run</ExtLink>.
+          </p>
+          {!live && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="ghost"
+                disabled={asking}
+                onClick={() => {
+                  setAsking(true);
+                  void getPrices(`https://${DEMO_HOST}`).then((prices) => {
+                    setLive(prices);
+                    setAsking(false);
+                  });
+                }}
+              >
+                {asking ? "Asking the demo server..." : "Use today's Google prices"}
+              </Button>
+              {live === null && <span className="text-sm text-gray-600 dark:text-white/90">The demo server hasn't read them yet.</span>}
+            </div>
+          )}
         </div>
-      )}
+      </details>
     </Card>
   );
 }

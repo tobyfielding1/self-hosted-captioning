@@ -36,7 +36,7 @@ Opt-in at install, like spoken captions (`GOOGLE_TRANSLATE=1` or `0`). An instal
 
 ## Prices
 
-The install and the server read Google's prices from the Cloud Billing catalog (`price.py`, `backend/src/prices.ts`). Translate's free 500,000 characters are a monthly credit, not a price tier, so they are stated, not read. Soniox has no price list to read; the home page's Soniox figures are dated (`PRICES_AS_OF` in `VenueView.tsx`). The home page asks the demo server for languages and prices only when someone opens or presses them, so a visit doesn't wake it.
+The server reads Google's prices from the Cloud Billing catalog (`backend/src/prices.ts`). The install does not. It links to the homepage, where someone can ask the demo server. Translate's free 500,000 characters are a monthly credit, not a price tier, so they are stated, not read. Soniox has no price list to read; the home page's Soniox figures are dated (`PRICES_AS_OF` in `VenueView.tsx`). The home page asks the demo server for languages and prices only when someone opens or presses them, so a visit doesn't wake it.
 
 The sound desk's Spending section reads `/spend`, which needs the desk token. Soniox spend comes from Soniox's usage summary (daily cost totals), not from usage logs. Google has no API for spend without a BigQuery billing export, so Google stays a link to the billing report. Spend is fetched when the section is opened.
 

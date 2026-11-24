@@ -534,38 +534,19 @@ background() {
     step "Building the captioning server (about 3 minutes)"
   done
 }
-# Prints a paragraph about an optional Google service, with its price read just now. See price.py.
-# The Cloud Billing API has to be on first. A new project reaches these questions before the
-# background setup turns it on. Enabling returns before the API answers; price.py waits that out.
-explain_price() {
-  local currency token paragraph
-  if [ -z "${BILLING_CATALOG:-}" ]; then
-    BILLING_CATALOG=1
-    if ! gcloud services list --enabled --project="$PROJECT" --filter="config.name=cloudbilling.googleapis.com" --format="value(config.name)" 2>>"$LOG" | grep -q cloudbilling; then
-      spin "Turning on Google's price list"
-      gcloud services enable cloudbilling.googleapis.com --project="$PROJECT" --quiet >>"$LOG" 2>&1 || true
-      spin_stop
-    fi
-  fi
-  currency="$(gcloud billing accounts describe "$BILLING" --format='value(currencyCode)' 2>>"$LOG" || true)"
-  token="$(gcloud auth print-access-token 2>>"$LOG" || true)"
-  spin "Reading Google's current price"
-  paragraph="$(GOOGLE_CLOUD_PROJECT="$PROJECT" ACCESS_TOKEN="$token" python3 price.py "$1" "$currency" 2>>"$LOG")"
-  spin_stop
-  printf '\n%s\n\n' "$paragraph" | fold -s -w 78
-}
-
 # The optional Google services are asked here, before the deploy starts, because that work runs in the background.
-# Enter keeps the current choice. The figures are printed either way, not saved.
+# Enter keeps the current choice. Prices are not read here: the homepage can show today's Google prices.
 # Stop the previous spinner first. It redraws the current line and would hide this question.
 spin_stop
+
+note "For today's Google Translate and spoken-caption prices, open the homepage."
+link "$APP_URL"
 
 # Google Translate. An install from before this question has no GOOGLE_TRANSLATE and was always on.
 GOOGLE_TRANSLATE="$(env_value GOOGLE_TRANSLATE)"
 if [ -z "$GOOGLE_TRANSLATE" ] && [ -n "$(env_value SPEAKER_TOKEN)" ]; then GOOGLE_TRANSLATE=1; fi
 if [ "$GOOGLE_TRANSLATE" = "1" ]; then
   note "Google Translate is on."
-  explain_price translate
   read -rp "   Leave Google Translate on? [Y/n] " answer
   case "$answer" in
     n|N|no|NO)
@@ -575,7 +556,6 @@ if [ "$GOOGLE_TRANSLATE" = "1" ]; then
     *) note "Google Translate stays on." ;;
   esac
 else
-  explain_price translate
   read -rp "   Turn Google Translate on? [y/N] " answer
   case "$answer" in
     y|Y|yes|YES) GOOGLE_TRANSLATE=1 ;;
@@ -587,7 +567,6 @@ SPOKEN="$(env_value SPOKEN)"
 REMOVE_SPOKEN=""
 if [ "$SPOKEN" = "1" ]; then
   note "Spoken captions are on."
-  explain_price speech
   read -rp "   Leave spoken captions on? [Y/n] " answer
   case "$answer" in
     n|N|no|NO)
@@ -599,7 +578,6 @@ if [ "$SPOKEN" = "1" ]; then
   esac
 else
   SPOKEN=""
-  explain_price speech
   read -rp "   Turn spoken captions on? [y/N] " answer
   case "$answer" in
     y|Y|yes|YES) SPOKEN=1 ;;
