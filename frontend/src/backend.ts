@@ -1,6 +1,6 @@
 export const ORIGINAL = "original";
 /** Keep these in step with PROTOCOL_VERSION and SETUP_VERSION in the backend. */
-export const PROTOCOL_VERSION = "4.5.0";
+export const PROTOCOL_VERSION = "4.6.0";
 /** Installs that have never recorded a setup version. */
 export const SETUP_BASELINE = "1.0.0";
 /** The install a venue needs. This one asks about Google Translate, spoken captions, the context for Soniox, and the session length. */

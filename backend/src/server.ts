@@ -15,7 +15,7 @@ const VERSION = typeof __VERSION__ === "string" ? __VERSION__ : "dev";
 // Major stays a number so a page from the previous release still accepts this server.
 // PROTOCOL_VERSION is the code. A cold start picks it up. Bump minor for an optional code change, patch for a security fix in the code, major when an old server cannot be trusted.
 export const PROTOCOL = 4;
-export const PROTOCOL_VERSION = "4.5.0";
+export const PROTOCOL_VERSION = "4.6.0";
 // SETUP_VERSION is the install. setup.sh records it, including the Node image it selects. A cold start does not. Bump minor for a new question or a new Node major, patch for a security fix that needs the install, major when an old install cannot be trusted.
 export const SETUP_VERSION = "1.3.0";
 

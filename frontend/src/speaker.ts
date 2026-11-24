@@ -42,15 +42,17 @@ export class SpeakerConnection {
     private onRejected: () => void,
   ) {}
 
-  start(test = false) {
-    this.testOnOpen = test;
-    if (this.wanted) {
-      if (test) this.send({ type: "test" });
-      return;
-    }
+  start() {
+    if (this.wanted) return;
     this.wanted = true;
     this.retry = 0;
     this.connect();
+  }
+
+  /** Turn test captions on or off. An on sent before the socket opens is sent when it does. */
+  setTesting(on: boolean) {
+    this.testOnOpen = on && this.ws?.readyState !== WebSocket.OPEN;
+    if (this.ws?.readyState === WebSocket.OPEN) this.send(on ? { type: "test" } : { type: "testOff" });
   }
 
   private setState(s: ConnState) {
@@ -101,7 +103,7 @@ export class SpeakerConnection {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
 
-  /** JSON control message while the desk is live (pause, test, endpoint settings). */
+  /** JSON control message while the desk is live (pause, endpoint settings). */
   sendControl(msg: unknown) {
     this.send(msg);
   }

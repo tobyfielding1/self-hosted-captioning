@@ -623,6 +623,32 @@ describe("speaker lifecycle", () => {
     expect(preview.lines.join(" ")).toContain("Hello there.");
     await until(() => soniox.open().length === 0, 2000);
   });
+
+  it("turns test captions off before the minute, and leaves a listener's stream open", async () => {
+    const s = await speaker();
+    await s.opened();
+    s.ws.send(JSON.stringify({ type: "test" }));
+    s.ws.send(FRAME);
+    await s.waitFor((m) => m.type === "stats" && m.testing === true);
+    expect(soniox.open()).toHaveLength(1);
+    const before = s.messages.length;
+    s.ws.send(JSON.stringify({ type: "testOff" }));
+    await until(
+      () => soniox.open().length === 0 && s.messages.slice(before).some((m) => m.type === "stats" && m.testing === false),
+      300,
+    );
+
+    const a = listener("original");
+    await a.opened();
+    s.ws.send(JSON.stringify({ type: "test" }));
+    s.ws.send(FRAME);
+    await a.waitFor((m) => m.type === "line" && String(m.text).includes("Hello there."));
+    const marked = s.messages.length;
+    s.ws.send(JSON.stringify({ type: "testOff" }));
+    await until(() => s.messages.slice(marked).some((m) => m.type === "stats" && m.testing === false));
+    await sleep(80);
+    expect(soniox.open()).toHaveLength(1);
+  });
 });
 
 describe("errors", () => {
@@ -725,6 +751,43 @@ describe("google fallback", () => {
     const late = listener("original");
     const history = await late.waitFor((m) => m.type === "history");
     expect(history.lines).toContain("Hello there.");
+  });
+
+  it("starts the next reading empty after the last listener leaves", async () => {
+    const s = await speaker();
+    await s.opened();
+    const a = listener("original");
+    await a.opened();
+    s.ws.send(FRAME);
+    await a.waitFor((m) => m.type === "line" && String(m.text).includes("Hello there."));
+    const mark = s.messages.length;
+    a.ws.close();
+    await until(() => s.messages.slice(mark).some((m) => m.type === "stats" && !m.listeners.original));
+    const late = listener("original");
+    const history = await late.waitFor((m) => m.type === "history");
+    expect(history.lines ?? []).not.toContain("Hello there.");
+    expect(history.current ?? "").toBe("");
+  });
+
+  it("starts the sound desk preview empty after test captions closes", async () => {
+    const s = await speaker();
+    await s.opened();
+    s.ws.send(JSON.stringify({ type: "test" }));
+    s.ws.send(FRAME);
+    await s.waitFor((m) => m.type === "preview" && (m.lines ?? []).some((line: string) => line.includes("Hello there.")));
+    const closed = s.messages.length;
+    s.ws.send(JSON.stringify({ type: "testOff" }));
+    await until(
+      () => soniox.open().length === 0 && s.messages.slice(closed).some((m) => m.type === "stats" && m.testing === false),
+      300,
+    );
+    const again = s.messages.length;
+    s.ws.send(JSON.stringify({ type: "test" }));
+    s.ws.send(FRAME);
+    const preview = await s.waitFor(
+      (m) => m.type === "preview" && s.messages.indexOf(m) >= again && (m.lines ?? []).some((line: string) => line.includes("Hello there.")),
+    );
+    expect(preview.lines.filter((line: string) => line.includes("Hello there."))).toHaveLength(1);
   });
 });
 

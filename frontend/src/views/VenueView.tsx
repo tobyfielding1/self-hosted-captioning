@@ -232,7 +232,12 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
   const audioChain = useRef(Promise.resolve());
   const levelRef = useRef(0);
   const lastHeardRef = useRef(0);
+  const lastSpeechRef = useRef(0);
   const connRef = useRef<SpeakerConnection | null>(null);
+  const testShown = useRef(false);
+  const testWant = useRef<boolean | null>(null);
+  const followingRef = useRef(false);
+  const [testOn, setTestOn] = useState(false);
   const endpointRef = useRef(endpoint);
   endpointRef.current = endpoint;
   const contextRef = useRef(context);
@@ -335,12 +340,30 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
       },
       (msg: ServerMessage) => {
         if (msg.type === "hello") setHello(msg);
-        else if (msg.type === "stats") setStats(msg);
-        else if (msg.type === "preview") setPreview(msg);
+        else if (msg.type === "stats") {
+          setStats(msg);
+          followingRef.current = Object.values(msg.listeners).some((n) => n > 0);
+          // A click wins until the server agrees. Once it has agreed, a later stats message can turn it off.
+          if (testWant.current === null || msg.testing === testWant.current) {
+            testWant.current = null;
+            testShown.current = msg.testing;
+            setTestOn(msg.testing);
+          }
+          if (!followingRef.current && !testShown.current) setPreview(null);
+        }
+        else if (msg.type === "preview") {
+          if (followingRef.current || testShown.current) setPreview(msg);
+        }
         else if (msg.type === "error") {
           setErrors((e) => [...e.slice(-19), { at: new Date().toISOString(), message: msg.message }]);
           setShownError(msg.message);
         } else if (msg.type === "stopped") {
+          testWant.current = null;
+          testShown.current = false;
+          followingRef.current = false;
+          setTestOn(false);
+          setStats(null);
+          setPreview(null);
           setNotice(
             msg.reason === "idle"
               ? "Stopped because it was quiet for an hour. Press Start to begin again."
@@ -364,6 +387,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
       const gate = gateRef.current;
       if (!gate) return;
       const decision = await gate.push(samples);
+      if (decision.speech) lastSpeechRef.current = performance.now();
       const connection = connRef.current;
       if (!connection || connection.state !== "live") return;
       for (const frame of decision.forward) connection.sendAudio(frame.slice().buffer);
@@ -388,6 +412,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
     async (id: string, forcedMode?: InputMode) => {
       captureRef.current?.stop();
       captureRef.current = null;
+      lastSpeechRef.current = 0;
       setMic("asking");
       try {
         const savedMode = localStorage.getItem(STORE.mode(id)) as InputMode | null;
@@ -457,7 +482,7 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
     void openMic(deviceId, m);
   };
 
-  const start = (test = false) => {
+  const start = () => {
     setNotice(null);
     setShownError(null);
     const gate = gateRef.current;
@@ -465,13 +490,26 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
       gate.hangoverMs = clampSendAfter(sendAfter);
       if (!live) gate.reset();
     }
-    connRef.current!.start(test);
+    connRef.current!.start();
+  };
+
+  const toggleTest = () => {
+    const next = !testShown.current;
+    testWant.current = next;
+    testShown.current = next;
+    setTestOn(next);
+    if (!next && !followingRef.current) setPreview(null);
+    connRef.current?.setTesting(next);
   };
 
   const stop = () => {
     connRef.current!.stop();
     setStats(null);
     setPreview(null);
+    testWant.current = null;
+    testShown.current = false;
+    followingRef.current = false;
+    setTestOn(false);
   };
 
   const copyDiagnostics = async () => {
@@ -527,8 +565,20 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
   }
 
   const heard = performance.now() - lastHeardRef.current < 600;
+  const speaking = speech === "ready" && performance.now() - lastSpeechRef.current < 600;
+  const meterLabel =
+    speech === "ready"
+      ? speaking
+        ? "Speech detected"
+        : "No speech detected"
+      : heard
+        ? "We can hear you"
+        : "Quiet: speak and check the bar moves";
+  const meterMuted = speech === "ready" && !speaking;
   const meterPct = Math.min(100, Math.sqrt(level / METER_MAX) * 100);
   const listenersText = stats ? describeListeners(stats.listeners) : "";
+  const following = !!stats && Object.values(stats.listeners).some((n) => n > 0);
+  const showReading = live && (following || testOn);
 
   let headline = "Not live";
   if (conn === "connecting") headline = "Connecting...";
@@ -601,8 +651,8 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
                   style={{ width: `${meterPct}%` }}
                 />
               </div>
-              <p className="mt-2 text-lg font-semibold" aria-live="polite">
-                {heard ? "We can hear you" : "Quiet: speak and check the bar moves"}
+              <p className={`mt-2 text-lg font-semibold ${meterMuted ? "text-gray-500 dark:text-white/50" : "text-charcoal dark:text-white"}`} aria-live="polite">
+                {meterLabel}
               </p>
             </div>
           </>
@@ -613,7 +663,6 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
         <p className="text-3xl font-bold" aria-live="polite">
           {headline}
         </p>
-        {live && conn === "live" && stats?.testing && <p className="text-purple dark:text-leaf">Test captions running for a minute.</p>}
         {live && stats?.endsInS !== undefined && <p>Stops automatically in {clock(stats.endsInS)}.</p>}
         {!live && sessionShown !== null && (
           <p>Each session stops automatically after {clock(Math.round(sessionShown * 60))}. Press Start again to carry on.</p>
@@ -638,12 +687,34 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
               <Button big variant="danger" onClick={stop}>
                 Stop
               </Button>
-              <Button variant="secondary" onClick={() => start(true)}>
+              <Button
+                big
+                variant={testOn ? "primary" : "secondary"}
+                aria-pressed={testOn}
+                onClick={toggleTest}
+                className="!text-base"
+              >
                 Test captions
               </Button>
             </>
           )}
         </div>
+
+        {live && conn === "live" && testOn && <p className="text-purple dark:text-leaf">Test captions running for a minute.</p>}
+
+        {showReading && (
+          <div className="rounded-xl bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/15 p-3 text-lg leading-snug">
+            <p className="text-sm font-semibold text-gray-500 dark:text-white/90 mb-1">What people are reading</p>
+            {preview?.lines.map((l, i) => (
+              <p key={i}>{l}</p>
+            ))}
+            {preview && (preview.current || preview.partial) && (
+              <p>
+                {preview.current} <span className="text-gray-400 dark:text-white/90">{preview.partial}</span>
+              </p>
+            )}
+          </div>
+        )}
 
         {live && (
           <p>
@@ -653,18 +724,6 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
               Open the audience view
             </a>
           </p>
-        )}
-
-        {preview && (preview.lines.length > 0 || preview.current || preview.partial) && (
-          <div className="rounded-xl bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/15 p-3 text-lg leading-snug">
-            <p className="text-sm font-semibold text-gray-500 dark:text-white/90 mb-1">What people are reading</p>
-            {preview.lines.map((l, i) => (
-              <p key={i}>{l}</p>
-            ))}
-            <p>
-              {preview.current} <span className="text-gray-400 dark:text-white/90">{preview.partial}</span>
-            </p>
-          </div>
         )}
       </section>
 

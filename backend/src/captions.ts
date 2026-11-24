@@ -24,4 +24,11 @@ export class Caption {
   snapshot() {
     return { lines: this.lines, current: this.current.trimStart(), partial: this.partial };
   }
+
+  /** Drops finished lines and the line in progress. */
+  clear() {
+    this.lines = [];
+    this.current = "";
+    this.partial = "";
+  }
 }

@@ -209,6 +209,7 @@ export class Hub {
   /** Start of this session. A reconnect inside the grace period keeps it. */
   private liveSince = 0;
   private testUntil = 0;
+  private testTimer?: NodeJS.Timeout;
   private rooms = new Map<string, Room>();
   private streams = new Map<string, SonioxStream>();
   private backoff = new Map<string, { until: number; delay: number }>();
@@ -312,10 +313,9 @@ export class Hub {
     }
     if (msg.type === "stop") this.endSession("stopped");
     else if (msg.type === "pause") this.setPaused(!!msg.paused);
-    else if (msg.type === "test") {
-      this.testUntil = Date.now() + this.timing.testMs;
-      this.sendStats();
-    } else if (msg.type === "endpoint") {
+    else if (msg.type === "test") this.setTesting(true);
+    else if (msg.type === "testOff") this.setTesting(false);
+    else if (msg.type === "endpoint") {
       const next = parseEndpoint(msg);
       if (next) this.setEndpoint(next);
     } else if (msg.type === "context") {
@@ -324,6 +324,22 @@ export class Hub {
       this.sessionMinutes = parseSessionMinutes(msg.minutes);
       this.sendStats();
     }
+  }
+
+  /** Keep the original stream open with no listeners, then close it. The desk can turn it off sooner. */
+  private setTesting(on: boolean) {
+    clearTimeout(this.testTimer);
+    this.testTimer = undefined;
+    if (on) {
+      this.testUntil = Date.now() + this.timing.testMs;
+      this.testTimer = setTimeout(() => this.setTesting(false), this.timing.testMs);
+      this.testTimer.unref();
+    } else if (this.testUntil !== 0) {
+      this.testUntil = 0;
+      this.reconcile();
+      this.forgetCaptions();
+    }
+    this.sendStats();
   }
 
   private setContext(next: string | null) {
@@ -389,6 +405,7 @@ export class Hub {
     this.live = false;
     this.paused = false;
     this.testUntil = 0;
+    clearTimeout(this.testTimer);
     clearTimeout(this.graceTimer);
     const speaker = this.speaker;
     this.speaker = null;
@@ -461,6 +478,7 @@ export class Hub {
       room.lastSpeakingRate = BASE_SPEAKING_RATE;
     }
     this.reconcile();
+    this.forgetCaptions();
     this.sendStats();
   }
 
@@ -565,6 +583,19 @@ export class Hub {
 
   // --------------------------------------------------------------- captions
 
+  /** Nobody is reading and test captions is off, so the next time the desk preview opens it starts empty. */
+  private forgetCaptions() {
+    if (this.testUntil > Date.now()) return;
+    for (const room of this.rooms.values()) if (room.listeners.size > 0) return;
+    this.spoken.clear();
+    this.preview.clear();
+    for (const room of this.rooms.values()) {
+      if (room.caption !== this.spoken) room.caption.clear();
+      room.spoken.clear();
+    }
+    this.pending = { text: "", langs: new Map() };
+  }
+
   /** Which stream the sound desk preview follows. */
   private previewKey(): string | null {
     if (this.streams.has(ORIGINAL)) return ORIGINAL;
@@ -573,6 +604,9 @@ export class Hub {
   }
 
   private onTokens(key: string, tokens: SonioxToken[]) {
+    // A stream can still deliver its last words after it is no longer needed. Those belong to the
+    // reading that just closed, so they are not kept for the next one.
+    if (!this.needed(key)) return;
     this.backoff.delete(key);
     const room = this.rooms.get(key);
     for (const part of partsOf(key, tokens)) {
