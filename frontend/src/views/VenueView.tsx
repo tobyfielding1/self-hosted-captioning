@@ -900,10 +900,6 @@ function Desk({ backend, token, shareOpen }: { backend: string; token: string; s
             </div>
           </div>
         )}
-        <p className="text-sm text-gray-600 dark:text-white/90 break-all">
-          Server: {backend}
-          {status && ` (version ${status.version})`}
-        </p>
         <Delete status={status} />
       </Details>
 
